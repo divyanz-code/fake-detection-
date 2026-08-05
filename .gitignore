@@ -52,3 +52,29 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+
+# Python cache
+**/__pycache__/
+*.pyo
+*.pyd
+
+# Python databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# VS Code (optional)
+.vscode/
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Python env files
+.python-version
