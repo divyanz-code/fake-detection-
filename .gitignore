@@ -78,3 +78,7 @@ htmlcov/
 
 # Python env files
 .python-version
+
+# User Uploads and testing directories
+backend/uploads/
+backend/test_output/
