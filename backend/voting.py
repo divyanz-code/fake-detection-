@@ -49,28 +49,24 @@ class MajorityVotingEngine:
             else:
                 real_votes += 1
                 
-        # 1. Calculate winning class based on majority vote
-        if fake_votes > real_votes:
+        # Strict Single-Fake Threshold Rule (User Directive):
+        # 1. If EVEN 1 model predicts "fake" (fake_votes >= 1) or fails to predict, overall result is "fake".
+        # 2. Overall result is "real" ONLY when ALL models (100%) predict "real" (fake_votes == 0).
+        
+        # Count missing/invalid predictions as "fake"
+        total_models = max(4, len(predictions))
+        missing_count = total_models - len(predictions)
+        fake_votes += missing_count
+
+        for _ in range(missing_count):
+            fake_scores.append(1.0)
+            real_scores.append(0.0)
+
+        if fake_votes >= 1:
             final_pred = "fake"
-        elif real_votes > fake_votes:
+            final_conf = max(fake_scores) # Use max fake score or avg fake score
+        else:
             final_pred = "real"
-        else:
-            # 2. Tie-breaker: 2 vs 2.
-            # Decided by the class with the higher average probability across all models.
-            avg_real_prob = sum(real_scores) / len(real_scores)
-            avg_fake_prob = sum(fake_scores) / len(fake_scores)
-            
-            if avg_fake_prob >= avg_real_prob:
-                final_pred = "fake"
-            else:
-                final_pred = "real"
-                
-        # 3. Calculate Final Confidence Score:
-        # We calculate the average confidence/probability of the winning class
-        # across all models to represent the overall system certainty.
-        if final_pred == "real":
             final_conf = sum(real_scores) / len(real_scores)
-        else:
-            final_conf = sum(fake_scores) / len(fake_scores)
             
         return final_pred, round(float(final_conf), 4)

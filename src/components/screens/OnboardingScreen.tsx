@@ -1,79 +1,51 @@
-import React, { useState } from "react";
-import { View, StyleSheet, Text, Pressable, Dimensions, useColorScheme } from "react-native";
+import React from "react";
+import { View, StyleSheet, Text, Pressable } from "react-native";
+import { Image } from "expo-image";
 import { useApp } from "../../context/AppContext";
-
-const { width } = Dimensions.get("window");
-
-const slides = [
-  {
-    title: "AI Face Analysis",
-    description: "Deep learning models inspect visual cues in facial regions to determine real vs manipulated content.",
-    icon: "🔬",
-  },
-  {
-    title: "Multi-Region Inspection",
-    description: "We extract and analyze the eyes, nose, lips, and whole face individually for targeted abnormalities.",
-    icon: "🎯",
-  },
-  {
-    title: "Majority Voting Engine",
-    description: "Our system combines regional predictions using a voting model to yield high-certainty classifications.",
-    icon: "⚖️",
-  },
-];
 
 export const OnboardingScreen: React.FC = () => {
   const { navigateTo } = useApp();
-  const [activeSlide, setActiveSlide] = useState(0);
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
 
   const handleNext = () => {
-    if (activeSlide < slides.length - 1) {
-      setActiveSlide(activeSlide + 1);
-    } else {
-      navigateTo("login");
-    }
+    navigateTo("login");
   };
 
   return (
-    <View style={[styles.container, isDark ? styles.bgDark : styles.bgLight]}>
-      {/* Brand Header */}
-      <View style={styles.header}>
-        <Text style={[styles.brandText, isDark ? styles.textWhite : styles.textDark]}>
-          Aegis<Text style={styles.brandAccent}>Face</Text>
+    <View style={styles.container}>
+      {/* Title & Subtitle */}
+      <View style={styles.headerContainer}>
+        <Text style={styles.title}>AI Face Analysis</Text>
+        <Text style={styles.subtitle}>
+          We analyze key facial regions for accurate predictions.
         </Text>
       </View>
 
-      {/* Slide Content */}
-      <View style={styles.slideContainer}>
-        <Text style={styles.slideIcon}>{slides[activeSlide].icon}</Text>
-        <Text style={[styles.slideTitle, isDark ? styles.textWhite : styles.textDark]}>
-          {slides[activeSlide].title}
-        </Text>
-        <Text style={[styles.slideDescription, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}>
-          {slides[activeSlide].description}
-        </Text>
-      </View>
-
-      {/* Slide Indicators */}
-      <View style={styles.indicatorContainer}>
-        {slides.map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.indicator,
-              activeSlide === i ? styles.indicatorActive : styles.indicatorInactive,
-            ]}
+      {/* Centered Avatar with Scan Corners Overlay */}
+      <View style={styles.illustrationContainer}>
+        <View style={styles.avatarWrapper}>
+          <Image
+            source={require("../../../assets/images/onboarding_avatar.png")}
+            style={styles.avatar}
+            contentFit="cover"
           />
-        ))}
+          {/* Target Scanning Corners */}
+          <View style={[styles.corner, styles.topLeft]} />
+          <View style={[styles.corner, styles.topRight]} />
+          <View style={[styles.corner, styles.bottomLeft]} />
+          <View style={[styles.corner, styles.bottomRight]} />
+        </View>
+      </View>
+
+      {/* Page Indicators */}
+      <View style={styles.indicatorContainer}>
+        <View style={[styles.dot, styles.dotActive]} />
+        <View style={styles.dot} />
+        <View style={styles.dot} />
       </View>
 
       {/* Next Button */}
       <Pressable style={styles.button} onPress={handleNext}>
-        <Text style={styles.buttonText}>
-          {activeSlide === slides.length - 1 ? "Get Started" : "Continue"}
-        </Text>
+        <Text style={styles.buttonText}>Next</Text>
       </Pressable>
     </View>
   );
@@ -82,93 +54,111 @@ export const OnboardingScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 24,
+    backgroundColor: "#FFFFFF",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingTop: 80,
+    paddingBottom: 48,
+    paddingHorizontal: 24,
   },
-  bgLight: {
-    backgroundColor: "#ffffff",
-  },
-  bgDark: {
-    backgroundColor: "#0F172A",
-  },
-  header: {
-    marginTop: 48,
-  },
-  brandText: {
-    fontSize: 28,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  brandAccent: {
-    color: "#6366F1",
-  },
-  textWhite: {
-    color: "#ffffff",
-  },
-  textDark: {
-    color: "#0F172A",
-  },
-  slideContainer: {
+  headerContainer: {
     alignItems: "center",
-    maxWidth: 320,
-    gap: 16,
+    gap: 12,
+    width: "100%",
   },
-  slideIcon: {
-    fontSize: 72,
-    marginBottom: 16,
-  },
-  slideTitle: {
-    fontSize: 24,
-    fontWeight: "700",
+  title: {
+    color: "#1E1B4B", // Dark navy/indigo
+    fontSize: 26,
+    fontWeight: "800",
     textAlign: "center",
   },
-  slideDescription: {
-    fontSize: 16,
+  subtitle: {
+    color: "#6B7280", // Slate gray
+    fontSize: 15,
     textAlign: "center",
-    lineHeight: 24,
+    lineHeight: 22,
+    paddingHorizontal: 20,
   },
-  textSecondaryLight: {
-    color: "#4B5563",
+  illustrationContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    width: "100%",
   },
-  textSecondaryDark: {
-    color: "#9CA3AF",
+  avatarWrapper: {
+    width: 200,
+    height: 200,
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatar: {
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+  },
+  corner: {
+    position: "absolute",
+    width: 20,
+    height: 20,
+    borderColor: "#4F46E5", // Purple scanning brackets
+    borderWidth: 0,
+  },
+  topLeft: {
+    top: 0,
+    left: 0,
+    borderTopWidth: 2,
+    borderLeftWidth: 2,
+  },
+  topRight: {
+    top: 0,
+    right: 0,
+    borderTopWidth: 2,
+    borderRightWidth: 2,
+  },
+  bottomLeft: {
+    bottom: 0,
+    left: 0,
+    borderBottomWidth: 2,
+    borderLeftWidth: 2,
+  },
+  bottomRight: {
+    bottom: 0,
+    right: 0,
+    borderBottomWidth: 2,
+    borderRightWidth: 2,
   },
   indicatorContainer: {
     flexDirection: "row",
     gap: 8,
     justifyContent: "center",
-    marginVertical: 24,
+    marginBottom: 32,
   },
-  indicator: {
+  dot: {
+    width: 8,
     height: 8,
     borderRadius: 4,
+    backgroundColor: "#E5E7EB", // Inactive gray dot
   },
-  indicatorActive: {
-    width: 24,
-    backgroundColor: "#6366F1",
-  },
-  indicatorInactive: {
-    width: 8,
-    backgroundColor: "#D1D5DB",
+  dotActive: {
+    width: 18,
+    backgroundColor: "#4F46E5", // Active purple pill
   },
   button: {
-    backgroundColor: "#6366F1",
+    backgroundColor: "#4F46E5", // Solid primary purple
     paddingVertical: 16,
-    paddingHorizontal: 32,
     borderRadius: 12,
     alignSelf: "stretch",
     alignItems: "center",
-    marginBottom: 36,
-    shadowColor: "#6366F1",
+    shadowColor: "#4F46E5",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 6,
-    elevation: 4,
+    elevation: 3,
   },
   buttonText: {
-    color: "#ffffff",
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 });

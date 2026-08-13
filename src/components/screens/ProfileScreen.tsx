@@ -53,8 +53,8 @@ export const ProfileScreen: React.FC = () => {
         {totalScans > 0 && (
           <View style={styles.ratioBarContainer}>
             <View style={styles.ratioBarBg}>
-              <View style={[styles.ratioBarFake, { width: `${fakePercentage}%` }]} />
-              <View style={[styles.ratioBarReal, { width: `${realPercentage}%` }]} />
+              <View style={[styles.ratioBarFake, { width: `${fakePercentage}%` as any }]} />
+              <View style={[styles.ratioBarReal, { width: `${realPercentage}%` as any }]} />
             </View>
             <View style={styles.legendRow}>
               <View style={styles.legendItem}>

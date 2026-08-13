@@ -63,13 +63,86 @@ class FacialFeatureExtractor:
             logger.warning("MediaPipe Face Mesh is not initialized.")
             return None
 
+        # Resize large images for better MediaPipe detection accuracy
+        h, w = image.shape[:2]
+        if max(h, w) > 1280:
+            scale = 1280.0 / max(h, w)
+            proc_img = cv2.resize(image, (int(w * scale), int(h * scale)))
+        else:
+            proc_img = image
+
         # MediaPipe expects RGB images
-        rgb_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        rgb_img = cv2.cvtColor(proc_img, cv2.COLOR_BGR2RGB)
         results = self.face_mesh.process(rgb_img)
 
         if results.multi_face_landmarks:
-            return results.multi_face_landmarks[0].landmark
+            landmarks = results.multi_face_landmarks[0].landmark
+            # If we scaled down, landmarks are normalized (0 to 1) so they work seamlessly on original image!
+            return landmarks
         return None
+
+    def _fallback_face_crop(self, image):
+        """Fallback face detection using OpenCV Haar Cascade or Center Crop when landmarks fail."""
+        h, w = image.shape[:2]
+        try:
+            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+        except Exception:
+            faces = []
+
+        if len(faces) > 0:
+            fx, fy, fw, fh = faces[0]
+            cx, cy = fx + fw // 2, fy + fh // 2
+            size = int(max(fw, fh) * 1.3)
+            x1 = max(0, cx - size // 2)
+            y1 = max(0, cy - size // 2)
+            x2 = min(w, cx + size // 2)
+            y2 = min(h, cy + size // 2)
+            face_crop = image[y1:y2, x1:x2]
+        else:
+            size = min(h, w)
+            cx, cy = w // 2, h // 2
+            x1 = max(0, cx - size // 2)
+            y1 = max(0, cy - size // 2)
+            x2 = min(w, x1 + size)
+            y2 = min(h, y1 + size)
+            face_crop = image[y1:y2, x1:x2]
+            fx, fy, fw, fh = x1, y1, x2 - x1, y2 - y1
+
+        if face_crop is None or face_crop.size == 0:
+            face_crop = cv2.resize(image, (224, 224))
+            fx, fy, fw, fh = 0, 0, w, h
+
+        fh_c, fw_c = face_crop.shape[:2]
+        eye_crop = face_crop[int(fh_c*0.2):int(fh_c*0.45), int(fw_c*0.1):int(fw_c*0.9)]
+        nose_crop = face_crop[int(fh_c*0.35):int(fh_c*0.65), int(fw_c*0.25):int(fw_c*0.75)]
+        lips_crop = face_crop[int(fh_c*0.6):int(fh_c*0.9), int(fw_c*0.2):int(fw_c*0.8)]
+
+        if eye_crop.size == 0: eye_crop = face_crop
+        if nose_crop.size == 0: nose_crop = face_crop
+        if lips_crop.size == 0: lips_crop = face_crop
+
+        final_face = cv2.resize(self.denoise_image(self.enhance_contrast(face_crop)), (224, 224))
+        final_eye = cv2.resize(self.denoise_image(self.enhance_contrast(eye_crop)), (50, 50))
+        final_nose = cv2.resize(self.denoise_image(self.enhance_contrast(nose_crop)), (50, 50))
+        final_lips = cv2.resize(self.denoise_image(self.enhance_contrast(lips_crop)), (50, 50))
+
+        return {
+            'crops': {
+                'face': final_face,
+                'eye': final_eye,
+                'nose': final_nose,
+                'lips': final_lips
+            },
+            'bboxes': {
+                'face': [int(fx), int(fy), int(fw), int(fh)],
+                'eye': [int(fx + fw*0.1), int(fy + fh*0.2), int(fw*0.8), int(fh*0.25)],
+                'nose': [int(fx + fw*0.25), int(fy + fh*0.35), int(fw*0.5), int(fh*0.3)],
+                'lips': [int(fx + fw*0.2), int(fy + fh*0.6), int(fw*0.6), int(fh*0.3)]
+            },
+            'aligned_image': image
+        }
 
     def align_face(self, image, landmarks):
         """
@@ -194,8 +267,8 @@ class FacialFeatureExtractor:
         # 1. Detect Landmarks on original image
         landmarks = self._get_landmarks(image)
         if landmarks is None:
-            logger.warning(f"No face detected in {image_path}")
-            return None
+            logger.warning(f"MediaPipe landmark detection failed for {image_path}. Using fallback face detector.")
+            return self._fallback_face_crop(image)
 
         # 2. Face Alignment
         aligned_image = self.align_face(image, landmarks)

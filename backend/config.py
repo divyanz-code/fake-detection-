@@ -14,8 +14,9 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
     # Database config
-    # Default to sqlite local database if no postgresql database URL is specified
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+    # Default to sqlite local database with absolute path
+    BASE_DIR: str = os.path.dirname(os.path.abspath(__file__))
+    DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'app.db')}")
     
     # Cloudinary storage config (to be configured in Phase 4)
     CLOUDINARY_CLOUD_NAME: str = os.getenv("CLOUDINARY_CLOUD_NAME", "")

@@ -3,6 +3,7 @@ import { View, StyleSheet, Text, Pressable, SafeAreaView, useColorScheme } from 
 import { AppProvider, useApp } from "../context/AppContext";
 
 // Import Screens
+import { SplashScreen } from "../components/screens/SplashScreen";
 import { OnboardingScreen } from "../components/screens/OnboardingScreen";
 import { LoginScreen } from "../components/screens/LoginScreen";
 import { RegisterScreen } from "../components/screens/RegisterScreen";
@@ -21,6 +22,8 @@ const AppContent: React.FC = () => {
   // 1. Render Authentication / Guest Stack
   if (!userToken) {
     switch (activeScreen) {
+      case "splash":
+        return <SplashScreen />;
       case "onboarding":
         return <OnboardingScreen />;
       case "register":
@@ -62,8 +65,8 @@ const AppContent: React.FC = () => {
 
       {/* Modern Floating Navigation Tab Bar */}
       <View style={[styles.tabBarContainer, isDark ? styles.tabBarDark : styles.tabBarLight]}>
-        <Pressable 
-          style={styles.tabItem} 
+        <Pressable
+          style={styles.tabItem}
           onPress={() => navigateTo("dashboard")}
         >
           <Text style={[styles.tabIcon, isHomeActive ? styles.tabTextActive : styles.tabTextInactive]}>
@@ -74,8 +77,8 @@ const AppContent: React.FC = () => {
           </Text>
         </Pressable>
 
-        <Pressable 
-          style={styles.tabItem} 
+        <Pressable
+          style={styles.tabItem}
           onPress={() => navigateTo("history")}
         >
           <Text style={[styles.tabIcon, isHistoryActive ? styles.tabTextActive : styles.tabTextInactive]}>
@@ -86,8 +89,8 @@ const AppContent: React.FC = () => {
           </Text>
         </Pressable>
 
-        <Pressable 
-          style={styles.tabItem} 
+        <Pressable
+          style={styles.tabItem}
           onPress={() => navigateTo("profile")}
         >
           <Text style={[styles.tabIcon, isProfileActive ? styles.tabTextActive : styles.tabTextInactive]}>

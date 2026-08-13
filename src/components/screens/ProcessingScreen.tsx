@@ -1,18 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { View, StyleSheet, Text, ActivityIndicator, Pressable, useColorScheme } from "react-native";
+import { View, StyleSheet, Text, ActivityIndicator, Pressable } from "react-native";
 import { useApp } from "../../context/AppContext";
 
 export const ProcessingScreen: React.FC = () => {
   const { currentAnalysis, loadAnalysisDetail, navigateTo, error } = useApp();
+  const [percent, setPercent] = useState(10);
   const [pollCount, setPollCount] = useState(0);
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
 
-  // Polling effect
+  // Polling hook to query backend
   useEffect(() => {
     if (!currentAnalysis?.id) return;
-    
-    // Poll every 1 second
     const timer = setInterval(() => {
       loadAnalysisDetail(currentAnalysis.id);
       setPollCount((prev) => prev + 1);
@@ -21,24 +18,36 @@ export const ProcessingScreen: React.FC = () => {
     return () => clearInterval(timer);
   }, [currentAnalysis?.id, pollCount]);
 
-  // Handle completion state redirection
+  // Handle completion routing
   useEffect(() => {
     if (currentAnalysis?.status === "completed") {
-      navigateTo("results");
+      setPercent(100);
+      const delay = setTimeout(() => {
+        navigateTo("results");
+      }, 500);
+      return () => clearTimeout(delay);
     }
   }, [currentAnalysis?.status]);
 
+  // Simulate smooth percentage progress up to 95%
+  useEffect(() => {
+    if (percent >= 95) return;
+    const interval = setInterval(() => {
+      setPercent((prev) => {
+        if (prev >= 95) return 95;
+        // Increment faster in the beginning, slower as we approach 95%
+        const inc = prev < 50 ? 5 : prev < 80 ? 2 : 1;
+        return prev + inc;
+      });
+    }, 400);
+
+    return () => clearInterval(interval);
+  }, [percent]);
+
   const backendStatus = currentAnalysis?.status || "queued";
 
-  // Get state for each step based on the actual backend status
+  // Map backend status to processing steps (0 to 4)
   const getStepState = (stepIndex: number) => {
-    // Steps mapping:
-    // 0: Uploading
-    // 1: Preprocessing & Alignment
-    // 2: Region Crop & Face Detection
-    // 3: Keras Model Inference
-    // 4: Majority Voting Engine
-    
     const statusSequence = [
       ["queued", "uploading"],
       ["preprocessing", "processing"],
@@ -55,88 +64,85 @@ export const ProcessingScreen: React.FC = () => {
       }
     }
 
-    if (backendStatus === "completed") {
-      return "completed";
-    }
-    if (backendStatus === "failed") {
-      return "failed";
-    }
+    if (backendStatus === "completed") return "completed";
+    if (backendStatus === "failed") return "failed";
 
     if (stepIndex < activeIndex) return "completed";
     if (stepIndex === activeIndex) return "active";
     return "pending";
   };
 
-  const renderStep = (title: string, index: number) => {
+  const renderStepRow = (title: string, index: number) => {
     const state = getStepState(index);
-    let dotStyle = styles.dotPending;
-    let dotText = "○";
-    let titleStyle = styles.stepTitlePending;
+
+    let iconComponent;
+    let labelStyle: any = styles.stepTextPending;
 
     if (state === "completed") {
-      dotStyle = styles.dotCompleted;
-      dotText = "✓";
-      titleStyle = isDark ? styles.stepTitleCompletedDark : styles.stepTitleCompletedLight;
+      iconComponent = (
+        <View style={styles.checkWrapper}>
+          <Text style={styles.checkIcon}>✓</Text>
+        </View>
+      );
+      labelStyle = styles.stepTextCompleted;
     } else if (state === "active") {
-      dotStyle = styles.dotActive;
-      dotText = "●";
-      titleStyle = isDark ? styles.stepTitleActiveDark : styles.stepTitleActiveLight;
+      iconComponent = (
+        <View style={styles.activeDotWrapper}>
+          <View style={styles.activeDotInner} />
+        </View>
+      );
+      labelStyle = styles.stepTextActive;
+    } else {
+      iconComponent = <View style={styles.pendingDot} />;
     }
 
     return (
       <View key={index} style={styles.stepRow}>
-        <View style={[styles.dotContainer, dotStyle]}>
-          {state === "active" && index !== 4 ? (
-            <ActivityIndicator size="small" color="#ffffff" />
-          ) : (
-            <Text style={styles.dotText}>{dotText}</Text>
-          )}
-        </View>
-        <Text style={[styles.stepTitle, titleStyle]}>{title}</Text>
+        {iconComponent}
+        <Text style={labelStyle}>{title}</Text>
       </View>
     );
   };
 
+  if (error) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <Text style={styles.errorTitle}>Analysis Failed</Text>
+        <Text style={styles.errorSubtitle}>{error}</Text>
+        <Pressable style={styles.backBtn} onPress={() => navigateTo("dashboard")}>
+          <Text style={styles.backBtnText}>Return to Home</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.container, isDark ? styles.bgDark : styles.bgLight]}>
-      {/* Header */}
+    <View style={styles.container}>
+      {/* Title */}
       <View style={styles.header}>
-        <Text style={[styles.title, isDark ? styles.textWhite : styles.textDark]}>Analyzing Face</Text>
+        <Text style={styles.title}>Processing Video</Text>
+        <Text style={styles.subtitle}>Our AI is analyzing your video</Text>
       </View>
 
-      {/* Steps Container */}
-      <View style={styles.stepsContainer}>
-        {backendStatus === "failed" || error ? (
-          <View style={styles.failedCard}>
-            <Text style={styles.failedIcon}>⚠️</Text>
-            <Text style={styles.failedTitle}>Analysis Failed</Text>
-            <Text style={styles.failedText}>
-              {error || "An error occurred during facial extraction or model inference. Please try another image with a clear face."}
-            </Text>
-            <Pressable style={styles.backBtn} onPress={() => navigateTo("upload")}>
-              <Text style={styles.backBtnText}>Try Again</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={styles.stepsList}>
-            {renderStep("Uploading Media", 0)}
-            {renderStep("Facial Alignment & CLAHE Enhancer", 1)}
-            {renderStep("Facial Region Cropping", 2)}
-            {renderStep("Deep Learning Inference (CNN & ViT)", 3)}
-            {renderStep("Voting Engine Consensus", 4)}
-          </View>
-        )}
-      </View>
-
-      {/* Info Footer */}
-      {backendStatus !== "failed" && !error && (
-        <View style={styles.footer}>
-          <ActivityIndicator color="#6366F1" style={{ marginBottom: 12 }} />
-          <Text style={[styles.footerText, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}>
-            Processing image... this usually takes less than 5 seconds.
-          </Text>
+      {/* Circular Progress Ring */}
+      <View style={styles.progressContainer}>
+        <View style={styles.circleBg}>
+          {/* Inner Text */}
+          <Text style={styles.percentageText}>{percent}%</Text>
         </View>
-      )}
+      </View>
+
+      {/* Checklist Steps */}
+      <View style={styles.stepsList}>
+        {renderStepRow("Preprocessing", 0)}
+        {renderStepRow("Eye Analysis", 1)}
+        {renderStepRow("Nose Analysis", 2)}
+        {renderStepRow("Face Analysis", 3)}
+        {renderStepRow("Combining Results", 4)}
+      </View>
+
+      {/* Disclaimer */}
+      <Text style={styles.footerText}>Please don't close the app</Text>
     </View>
   );
 };
@@ -144,140 +150,146 @@ export const ProcessingScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 24,
-    paddingTop: 48,
+    paddingTop: 80,
+    paddingBottom: 48,
+    alignItems: "center",
     justifyContent: "space-between",
   },
-  bgLight: {
-    backgroundColor: "#F8FAFC",
-  },
-  bgDark: {
-    backgroundColor: "#0F172A",
+  center: {
+    justifyContent: "center",
+    gap: 16,
   },
   header: {
     alignItems: "center",
-    marginBottom: 40,
-    marginTop: 24,
+    width: "100%",
   },
   title: {
     fontSize: 22,
-    fontWeight: "700",
+    fontWeight: "800",
+    color: "#1E1B4B",
   },
-  textWhite: {
-    color: "#ffffff",
+  subtitle: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginTop: 6,
   },
-  textDark: {
-    color: "#0F172A",
-  },
-  textSecondaryLight: {
-    color: "#64748B",
-  },
-  textSecondaryDark: {
-    color: "#94A3B8",
-  },
-  stepsContainer: {
-    flex: 1,
+  progressContainer: {
+    marginVertical: 40,
+    alignItems: "center",
     justifyContent: "center",
   },
+  circleBg: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    borderWidth: 6,
+    borderColor: "#EEF2F6", // Outer ring track
+    borderLeftColor: "#4F46E5", // Simulating progress on the border
+    borderTopColor: "#4F46E5",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#4F46E5",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+  },
+  percentageText: {
+    fontSize: 34,
+    fontWeight: "800",
+    color: "#1E1B4B",
+  },
   stepsList: {
-    gap: 28,
-    paddingHorizontal: 16,
+    width: "100%",
+    maxWidth: 280,
+    gap: 18,
+    marginVertical: 20,
   },
   stepRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
   },
-  dotContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  checkWrapper: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#22C55E", // Green check wrapper
     alignItems: "center",
     justifyContent: "center",
   },
-  dotPending: {
+  checkIcon: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  activeDotWrapper: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
-    borderColor: "#94A3B8",
-    backgroundColor: "transparent",
-  },
-  dotActive: {
-    backgroundColor: "#6366F1",
-    borderColor: "#6366F1",
-    borderWidth: 2,
-  },
-  dotCompleted: {
-    backgroundColor: "#10B981",
-    borderColor: "#10B981",
-    borderWidth: 2,
-  },
-  dotText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  stepTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  stepTitlePending: {
-    color: "#94A3B8",
-  },
-  stepTitleActiveLight: {
-    color: "#0F172A",
-    fontWeight: "700",
-  },
-  stepTitleActiveDark: {
-    color: "#ffffff",
-    fontWeight: "700",
-  },
-  stepTitleCompletedLight: {
-    color: "#475569",
-  },
-  stepTitleCompletedDark: {
-    color: "#CBD5E1",
-  },
-  failedCard: {
+    borderColor: "#4F46E5",
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
-    gap: 12,
-    padding: 24,
-    borderRadius: 16,
-    backgroundColor: "#FEE2E2",
-    borderWidth: 1,
-    borderColor: "#FCA5A5",
+    justifyContent: "center",
   },
-  failedIcon: {
-    fontSize: 48,
+  activeDotInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#4F46E5", // Purple active center
   },
-  failedTitle: {
-    color: "#991B1B",
-    fontSize: 18,
+  pendingDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: "#E5E7EB", // Empty pending track
+    backgroundColor: "#FFFFFF",
+  },
+  stepTextCompleted: {
+    fontSize: 15,
     fontWeight: "700",
+    color: "#1F2937",
   },
-  failedText: {
-    color: "#B91C1C",
-    fontSize: 14,
+  stepTextActive: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#4F46E5", // Purple highlighted active step
+  },
+  stepTextPending: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#9CA3AF",
+  },
+  footerText: {
+    color: "#9CA3AF",
+    fontSize: 13,
+    fontWeight: "500",
     textAlign: "center",
-    lineHeight: 20,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#EF4444",
+  },
+  errorSubtitle: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    paddingHorizontal: 24,
   },
   backBtn: {
-    backgroundColor: "#EF4444",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+    backgroundColor: "#4F46E5",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
     marginTop: 8,
   },
   backBtnText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  footer: {
-    alignItems: "center",
-    paddingBottom: 48,
-  },
-  footerText: {
-    fontSize: 14,
-    textAlign: "center",
+    color: "#FFFFFF",
+    fontWeight: "700",
   },
 });

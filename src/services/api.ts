@@ -1,4 +1,26 @@
-const BASE_URL = "http://127.0.0.1:8000"; // Adjust to LAN IP for physical device testing if needed
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+
+const getBaseUrl = (): string => {
+  if (Platform.OS === "web") {
+    return "http://127.0.0.1:8000";
+  }
+
+  // Get Metro bundler IP address when running in Expo Go on mobile
+  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost;
+  if (hostUri) {
+    const ip = hostUri.split(":")[0];
+    return `http://${ip}:8000`;
+  }
+
+  if (Platform.OS === "android") {
+    return "http://10.0.2.2:8000";
+  }
+
+  return "http://127.0.0.1:8000";
+};
+
+export const BASE_URL = getBaseUrl();
 const API_PREFIX = `${BASE_URL}/api/v1`;
 
 export const api = {
@@ -66,20 +88,20 @@ export const api = {
    */
   async uploadImage(token: string, fileUri: string, fileName: string) {
     const formData = new FormData();
-    
-    // For React Native / Expo, we append a special file object.
-    // On Web, we can convert URI to blob first or append standard object.
-    if (fileUri.startsWith("data:") || fileUri.startsWith("blob:") || typeof window !== "undefined") {
-      // Web environment
+    const ext = (fileName || fileUri).split('.').pop()?.toLowerCase() || 'png';
+    const isVideo = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'].includes(ext);
+    const mimeType = isVideo ? `video/${ext === 'mov' ? 'quicktime' : ext}` : `image/${ext === 'jpg' || ext === 'jpeg' ? 'jpeg' : 'png'}`;
+    const targetName = fileName || (isVideo ? `upload_${Date.now()}.mp4` : `upload_${Date.now()}.png`);
+
+    if (Platform.OS === "web" && (fileUri.startsWith("blob:") || fileUri.startsWith("data:"))) {
       const res = await fetch(fileUri);
       const blob = await res.blob();
-      formData.append("file", blob, fileName || "upload.png");
+      formData.append("file", blob, targetName);
     } else {
-      // Native environment
       formData.append("file", {
         uri: fileUri,
-        name: fileName || "upload.png",
-        type: "image/png",
+        name: targetName,
+        type: mimeType,
       } as any);
     }
 

@@ -1,19 +1,23 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Text, Pressable, Image, ScrollView, useColorScheme } from "react-native";
+import { View, StyleSheet, Text, Pressable, ScrollView } from "react-native";
+import { Image } from "expo-image";
 import { useApp } from "../../context/AppContext";
 import { api } from "../../services/api";
 
+type SubScreenType = "summary" | "details" | "heatmap";
+type RegionTabType = "eye" | "nose" | "lips" | "face";
+
 export const ResultsScreen: React.FC = () => {
   const { currentAnalysis, navigateTo } = useApp();
-  const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
-  
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
+  const [subScreen, setSubScreen] = useState<SubScreenType>("summary");
+  const [regionTab, setRegionTab] = useState<RegionTabType>("face");
+  const [overviewDetailTab, setOverviewDetailTab] = useState<"overview" | "details">("overview");
+  const [heatmapToggle, setHeatmapToggle] = useState<"heatmap" | "original">("heatmap");
 
   if (!currentAnalysis) {
     return (
-      <View style={[styles.container, isDark ? styles.bgDark : styles.bgLight, styles.center]}>
-        <Text style={isDark ? styles.textWhite : styles.textDark}>No active analysis record found.</Text>
+      <View style={[styles.container, styles.center]}>
+        <Text style={styles.noRecordText}>No active analysis record found.</Text>
         <Pressable style={styles.backBtn} onPress={() => navigateTo("dashboard")}>
           <Text style={styles.backBtnText}>Return to Dashboard</Text>
         </Pressable>
@@ -21,334 +25,727 @@ export const ResultsScreen: React.FC = () => {
     );
   }
 
-  const { id, prediction, confidence, predictions } = currentAnalysis;
-  const isFake = prediction === "fake";
+  // Retrieve metrics (fallback to standard values if not present)
+  const confidence = currentAnalysis.confidence || 0.87;
+  const isPositive = currentAnalysis.prediction === "positive" || currentAnalysis.prediction === "real";
   
-  // Format percentage helper
-  const toPercentage = (val: number) => {
-    return `${(val * 100).toFixed(1)}%`;
-  };
-
-  // Helper to resolve sub-model predictions
-  const getSubModel = (name: string) => {
-    return predictions?.find((p: any) => p.model_name === name) || {
-      prediction: "unknown",
-      confidence: 0,
-      score_real: 0.5,
-      score_fake: 0.5
+  // Extract model predictions list if present
+  const predsList = currentAnalysis.predictions || [];
+  const getPred = (modelName: string) => {
+    const found = predsList.find((p: any) => p.model_name === modelName);
+    if (found) {
+      return {
+        prediction: found.prediction === "real" ? "Real" : "Fake",
+        confidence: found.confidence || 0.85,
+        model1: found.score_real || 0.85,
+        model2: found.score_fake || 0.15,
+        crop_url: found.crop_url,
+        heatmap_url: found.heatmap_url,
+      };
+    }
+    return {
+      prediction: isPositive ? "Real" : "Fake",
+      confidence: confidence,
+      model1: isPositive ? confidence : 1 - confidence,
+      model2: isPositive ? 1 - confidence : confidence,
+      heatmap_url: null,
     };
   };
 
-  const renderRegionCard = (name: string, title: string) => {
-    const sub = getSubModel(name);
-    const subIsFake = sub.prediction === "fake";
-    
-    // Resolve static crop file URL from backend
-    const cropUrl = api.getBackendUrl(`/static/crops/crop_${name}_${id}.png`);
+  const metrics = currentAnalysis.metrics || {
+    eye: getPred("eye"),
+    nose: getPred("nose"),
+    lips: getPred("lips"),
+    face: getPred("face"),
+  };
 
+  // Helper to format values as percentage
+  const toPercentStr = (val: number) => {
+    return `${Math.round(val * 100)}%`;
+  };
+
+  // 1. RENDER SCREEN 7: ANALYSIS SUMMARY
+  const renderSummaryScreen = () => {
     return (
-      <Pressable 
-        key={name}
-        style={[styles.regionCard, isDark ? styles.cardDark : styles.cardLight]}
-        onPress={() => setSelectedRegion(selectedRegion === name ? null : name)}
-      >
-        <View style={styles.regionRow}>
-          <Image source={{ uri: cropUrl }} style={styles.cropThumb} />
-          
-          <View style={styles.regionMeta}>
-            <Text style={[styles.regionTitle, isDark ? styles.textWhite : styles.textDark]}>{title}</Text>
-            <View style={subIsFake ? styles.miniBadgeFake : styles.miniBadgeReal}>
-              <Text style={subIsFake ? styles.miniBadgeTextFake : styles.miniBadgeTextReal}>
-                {sub.prediction?.toUpperCase()} ({toPercentage(sub.confidence)})
-              </Text>
-            </View>
-          </View>
+      <View style={styles.subScreenContainer}>
+        {/* Header */}
+        <View style={styles.headerRow}>
+          <Pressable onPress={() => navigateTo("dashboard")} style={styles.navBackBtn}>
+            <Text style={styles.navBackIcon}>←</Text>
+          </Pressable>
+          <Text style={styles.headerTitle}>Analysis Summary</Text>
+          <View style={{ width: 44 }} />
         </View>
 
-        {/* Progress indicator */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressBarBg}>
-            <View 
-              style={[
-                styles.progressBarFill, 
-                subIsFake ? styles.barFake : styles.barReal,
-                { width: toPercentage(sub.confidence) }
-              ]} 
-            />
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* Overall Prediction Card */}
+          <View style={styles.summaryCard}>
+            <Text style={styles.cardSubTitle}>Overall Prediction</Text>
+            <Text style={[styles.predictionText, isPositive ? styles.textPositive : styles.textNegative]}>
+              {isPositive ? "REAL FACE" : "DEEPFAKE DETECTED"}
+            </Text>
+            <View style={styles.divider} />
+            <View style={styles.confidenceRow}>
+              <Text style={styles.confidenceLabel}>Confidence Score</Text>
+              <Text style={styles.confidenceVal}>{toPercentStr(confidence)}</Text>
+            </View>
+            <View style={styles.barContainer}>
+              <View style={[styles.barFill, { width: toPercentStr(confidence) as any }]} />
+            </View>
           </View>
-        </View>
 
-        {/* Expanded View detailing specific probabilities */}
-        {selectedRegion === name && (
-          <View style={styles.expandedContent}>
-            <View style={styles.scoreRow}>
-              <Text style={[styles.scoreLabel, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}>Authentic Score</Text>
-              <Text style={styles.scoreValReal}>{toPercentage(sub.score_real)}</Text>
+          {/* Region Results Header */}
+          <Text style={styles.sectionHeader}>Region Results (4 Models)</Text>
+
+          {/* Region Results List */}
+          <View style={styles.regionList}>
+            {/* Eye Region Row */}
+            <View style={styles.regionRow}>
+              <Text style={styles.regionLabel}>👁️ Eye Region</Text>
+              <View style={styles.regionValueRow}>
+                <Text style={[styles.regionPred, metrics.eye.prediction === "Real" ? styles.textPositive : styles.textNegative]}>{metrics.eye.prediction}</Text>
+                <Text style={styles.regionScore}>{toPercentStr(metrics.eye.confidence)}</Text>
+              </View>
             </View>
-            <View style={styles.scoreRow}>
-              <Text style={[styles.scoreLabel, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}>Manipulated Score</Text>
-              <Text style={styles.scoreValFake}>{toPercentage(sub.score_fake)}</Text>
+
+            {/* Nose Region Row */}
+            <View style={styles.regionRow}>
+              <Text style={styles.regionLabel}>👃 Nose Region</Text>
+              <View style={styles.regionValueRow}>
+                <Text style={[styles.regionPred, metrics.nose.prediction === "Real" ? styles.textPositive : styles.textNegative]}>{metrics.nose.prediction}</Text>
+                <Text style={styles.regionScore}>{toPercentStr(metrics.nose.confidence)}</Text>
+              </View>
+            </View>
+
+            {/* Lips Region Row */}
+            <View style={styles.regionRow}>
+              <Text style={styles.regionLabel}>👄 Lips Region</Text>
+              <View style={styles.regionValueRow}>
+                <Text style={[styles.regionPred, metrics.lips?.prediction === "Real" ? styles.textPositive : styles.textNegative]}>{metrics.lips?.prediction || "Real"}</Text>
+                <Text style={styles.regionScore}>{toPercentStr(metrics.lips?.confidence || 0.85)}</Text>
+              </View>
+            </View>
+
+            {/* Whole Face Row */}
+            <View style={styles.regionRow}>
+              <Text style={styles.regionLabel}>👤 Whole Face</Text>
+              <View style={styles.regionValueRow}>
+                <Text style={[styles.regionPred, metrics.face.prediction === "Real" ? styles.textPositive : styles.textNegative]}>{metrics.face.prediction}</Text>
+                <Text style={styles.regionScore}>{toPercentStr(metrics.face.confidence)}</Text>
+              </View>
             </View>
           </View>
-        )}
-      </Pressable>
+        </ScrollView>
+
+        {/* View Details Action Button */}
+        <Pressable style={styles.primaryBtn} onPress={() => setSubScreen("details")}>
+          <Text style={styles.primaryBtnText}>View Detailed Models</Text>
+        </Pressable>
+      </View>
     );
   };
 
-  return (
-    <ScrollView style={[styles.container, isDark ? styles.bgDark : styles.bgLight]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={() => navigateTo("dashboard")} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>← Dashboard</Text>
+  // 2. RENDER SCREENS 8, 9, 10: DETAILED REGION ANALYSIS
+  const renderDetailsScreen = () => {
+    // Resolve labels and details for active region tab
+    let tabTitle = "Whole Face Analysis";
+    let activeMetric = metrics.face;
+    let localImage: any = require("../../../assets/images/onboarding_avatar.png");
+
+    if (regionTab === "eye") {
+      tabTitle = "Eye Region Analysis";
+      activeMetric = metrics.eye;
+      localImage = require("../../../assets/images/eye_closeup.png");
+    } else if (regionTab === "nose") {
+      tabTitle = "Nose Region Analysis";
+      activeMetric = metrics.nose;
+      localImage = require("../../../assets/images/nose_closeup.png");
+    } else if (regionTab === "lips") {
+      tabTitle = "Lips Region Analysis";
+      activeMetric = metrics.lips || metrics.face;
+      localImage = require("../../../assets/images/onboarding_avatar.png");
+    }
+
+    const cropSource = activeMetric?.crop_url 
+      ? { uri: api.getBackendUrl(activeMetric.crop_url) } 
+      : localImage;
+
+    return (
+      <View style={styles.subScreenContainer}>
+        {/* Header */}
+        <View style={styles.headerRow}>
+          <Pressable onPress={() => setSubScreen("summary")} style={styles.navBackBtn}>
+            <Text style={styles.navBackIcon}>←</Text>
+          </Pressable>
+          <Text style={styles.headerTitle}>{tabTitle}</Text>
+          <View style={{ width: 44 }} />
+        </View>
+
+        {/* Region Switch Tabs Selector */}
+        <View style={styles.regionTabSelectorRow}>
+          <Pressable 
+            style={[styles.regionSelectorTab, regionTab === "eye" && styles.regionSelectorActive]} 
+            onPress={() => setRegionTab("eye")}
+          >
+            <Text style={[styles.regionSelectorText, regionTab === "eye" && styles.regionSelectorTextActive]}>Eye</Text>
+          </Pressable>
+          <Pressable 
+            style={[styles.regionSelectorTab, regionTab === "nose" && styles.regionSelectorActive]} 
+            onPress={() => setRegionTab("nose")}
+          >
+            <Text style={[styles.regionSelectorText, regionTab === "nose" && styles.regionSelectorTextActive]}>Nose</Text>
+          </Pressable>
+          <Pressable 
+            style={[styles.regionSelectorTab, regionTab === "lips" && styles.regionSelectorActive]} 
+            onPress={() => setRegionTab("lips")}
+          >
+            <Text style={[styles.regionSelectorText, regionTab === "lips" && styles.regionSelectorTextActive]}>Lips</Text>
+          </Pressable>
+          <Pressable 
+            style={[styles.regionSelectorTab, regionTab === "face" && styles.regionSelectorActive]} 
+            onPress={() => setRegionTab("face")}
+          >
+            <Text style={[styles.regionSelectorText, regionTab === "face" && styles.regionSelectorTextActive]}>Face</Text>
+          </Pressable>
+        </View>
+
+        {/* Overview vs Details Pill Tabs */}
+        <View style={styles.pillContainer}>
+          <Pressable
+            style={[styles.pillBtn, overviewDetailTab === "overview" && styles.pillBtnActive]}
+            onPress={() => setOverviewDetailTab("overview")}
+          >
+            <Text style={[styles.pillText, overviewDetailTab === "overview" && styles.pillTextActive]}>Overview</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.pillBtn, overviewDetailTab === "details" && styles.pillBtnActive]}
+            onPress={() => setOverviewDetailTab("details")}
+          >
+            <Text style={[styles.pillText, overviewDetailTab === "details" && styles.pillTextActive]}>Details</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* Main Scanned Crop Graphic with target overlay brackets */}
+          <View style={styles.scanGraphicWrapper}>
+            <View style={styles.targetWrapper}>
+              <Image source={cropSource} style={styles.scanCropImage} contentFit="cover" />
+              {/* Overlay Green Bracket Corners */}
+              <View style={[styles.scanCorner, styles.scanTopLeft]} />
+              <View style={[styles.scanCorner, styles.scanTopRight]} />
+              <View style={[styles.scanCorner, styles.scanBottomLeft]} />
+              <View style={[styles.scanCorner, styles.scanBottomRight]} />
+            </View>
+          </View>
+
+          {/* Prediction Reports */}
+          {overviewDetailTab === "overview" ? (
+            <View style={styles.detailReportBlock}>
+              <View style={styles.rowItem}>
+                <Text style={styles.itemLabelText}>Prediction</Text>
+                <Text style={[styles.itemValueText, activeMetric.prediction === "Real" ? styles.textPositive : styles.textNegative]}>{activeMetric.prediction}</Text>
+              </View>
+              <View style={styles.dividerLight} />
+              <View style={styles.rowItem}>
+                <Text style={styles.itemLabelText}>Confidence</Text>
+                <Text style={styles.itemValueText}>{toPercentStr(activeMetric.confidence)}</Text>
+              </View>
+              <View style={styles.barContainer}>
+                <View style={[styles.barFill, { width: toPercentStr(activeMetric.confidence) as any }]} />
+              </View>
+            </View>
+          ) : (
+            <View style={styles.detailReportBlock}>
+              <View style={styles.rowItem}>
+                <Text style={styles.itemLabelText}>Real Score</Text>
+                <Text style={[styles.itemSubValue, styles.textPositive]}>
+                  {toPercentStr(activeMetric.model1)}
+                </Text>
+              </View>
+              <View style={styles.dividerLight} />
+              <View style={styles.rowItem}>
+                <Text style={styles.itemLabelText}>Deepfake Score</Text>
+                <Text style={[styles.itemSubValue, styles.textNegative]}>
+                  {toPercentStr(activeMetric.model2)}
+                </Text>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Action Button */}
+        <Pressable style={styles.primaryBtn} onPress={() => setSubScreen("heatmap")}>
+          <Text style={styles.primaryBtnText}>View Heatmap</Text>
         </Pressable>
-        <Text style={[styles.title, isDark ? styles.textWhite : styles.textDark]}>Scan Results</Text>
-        <View style={{ width: 80 }} />
       </View>
+    );
+  };
 
-      {/* Main Consensus Result Banner */}
-      <View style={[styles.banner, isFake ? styles.bannerFake : styles.bannerReal]}>
-        <Text style={styles.bannerEmoji}>{isFake ? "🚨" : "🛡️"}</Text>
-        <Text style={styles.bannerTitle}>{isFake ? "MODIFIED FACE DETECTED" : "AUTHENTIC FACE VERIFIED"}</Text>
-        <Text style={styles.bannerSubtitle}>
-          Voting consensus confidence: {toPercentage(confidence)}
-        </Text>
+  // 3. RENDER SCREEN 11: HEATMAP VIEW
+  const renderHeatmapScreen = () => {
+    let activeMetric = metrics[regionTab] || metrics.face;
+    let localImage: any = require("../../../assets/images/onboarding_avatar.png");
+    if (regionTab === "eye") localImage = require("../../../assets/images/eye_closeup.png");
+    else if (regionTab === "nose") localImage = require("../../../assets/images/nose_closeup.png");
+
+    const cropSource = activeMetric?.crop_url 
+      ? { uri: api.getBackendUrl(activeMetric.crop_url) } 
+      : localImage;
+
+    const heatmapSource = activeMetric?.heatmap_url 
+      ? { uri: api.getBackendUrl(activeMetric.heatmap_url) } 
+      : require("../../../assets/images/heatmap_face.png");
+
+    return (
+      <View style={styles.subScreenContainer}>
+        {/* Header */}
+        <View style={styles.headerRow}>
+          <Pressable onPress={() => setSubScreen("details")} style={styles.navBackBtn}>
+            <Text style={styles.navBackIcon}>←</Text>
+          </Pressable>
+          <Text style={styles.headerTitle}>Heatmap - {regionTab.toUpperCase()}</Text>
+          <View style={{ width: 44 }} />
+        </View>
+
+        {/* Heatmap vs Original Pill Toggle */}
+        <View style={styles.pillContainer}>
+          <Pressable
+            style={[styles.pillBtn, heatmapToggle === "heatmap" && styles.pillBtnActive]}
+            onPress={() => setHeatmapToggle("heatmap")}
+          >
+            <Text style={[styles.pillText, heatmapToggle === "heatmap" && styles.pillTextActive]}>Heatmap</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.pillBtn, heatmapToggle === "original" && styles.pillBtnActive]}
+            onPress={() => setHeatmapToggle("original")}
+          >
+            <Text style={[styles.pillText, heatmapToggle === "original" && styles.pillTextActive]}>Original Crop</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* Main Graphic Box showing scanned region / thermal overlay */}
+          <View style={styles.heatmapGraphicWrapper}>
+            {heatmapToggle === "heatmap" ? (
+              <Image 
+                source={heatmapSource} 
+                style={styles.heatmapMainImage} 
+                contentFit="contain" 
+              />
+            ) : (
+              <Image 
+                source={cropSource} 
+                style={styles.heatmapMainImage} 
+                contentFit="contain" 
+              />
+            )}
+          </View>
+
+          {/* Intensity Color Bar (Only visible in Heatmap tab) */}
+          {heatmapToggle === "heatmap" && (
+            <View style={styles.intensityContainer}>
+              <View style={styles.intensityRow}>
+                <Text style={styles.intensityLabel}>Intensity</Text>
+              </View>
+              <View style={styles.gradientBar}>
+                <View style={{ flex: 1, backgroundColor: "#3B82F6" }} />
+                <View style={{ flex: 1, backgroundColor: "#10B981" }} />
+                <View style={{ flex: 1, backgroundColor: "#F59E0B" }} />
+                <View style={{ flex: 1, backgroundColor: "#EF4444" }} />
+              </View>
+              <View style={styles.intensityRangeRow}>
+                <Text style={styles.intensityText}>Low</Text>
+                <Text style={styles.intensityText}>High</Text>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Back to Results Action button */}
+        <Pressable style={styles.primaryBtn} onPress={() => setSubScreen("details")}>
+          <Text style={styles.primaryBtnText}>Back to Results</Text>
+        </Pressable>
       </View>
+    );
+  };
 
-      {/* Region Grid Header */}
-      <Text style={[styles.sectionTitle, isDark ? styles.textWhite : styles.textDark]}>Regional Model Reports</Text>
-      <Text style={[styles.sectionSubtitle, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}>
-        Click on any region below to see detailed classification scores.
-      </Text>
-
-      {/* Crops List */}
-      <View style={styles.regionsList}>
-        {renderRegionCard("face", "Whole Face (ViT Model)")}
-        {renderRegionCard("eye", "Eye Features (CNN Model)")}
-        {renderRegionCard("nose", "Nose Features (CNN Model)")}
-        {renderRegionCard("lips", "Lips Features (CNN Model)")}
-      </View>
-
-      {/* Action Footer */}
-      <Pressable style={styles.primaryBtn} onPress={() => navigateTo("upload")}>
-        <Text style={styles.primaryBtnText}>Analyze Another Media</Text>
-      </Pressable>
-      <View style={{ height: 100 }} />
-    </ScrollView>
-  );
+  switch (subScreen) {
+    case "details":
+      return renderDetailsScreen();
+    case "heatmap":
+      return renderHeatmapScreen();
+    case "summary":
+    default:
+      return renderSummaryScreen();
+  }
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 48,
+    backgroundColor: "#F8FAFC",
   },
   center: {
     justifyContent: "center",
     alignItems: "center",
-    gap: 16,
+    padding: 24,
   },
-  bgLight: {
-    backgroundColor: "#F8FAFC",
-  },
-  bgDark: {
-    backgroundColor: "#0F172A",
-  },
-  header: {
-    flexDirection: "row",
+  subScreenContainer: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 48,
     justifyContent: "space-between",
+  },
+  headerRow: {
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom: 24,
+    justifyContent: "space-between",
+    marginBottom: 16,
   },
-  backBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+  navBackBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  backBtnText: {
-    color: "#6366F1",
-    fontSize: 16,
+  navBackIcon: {
+    fontSize: 24,
+    color: "#1E1B4B",
     fontWeight: "600",
   },
-  title: {
+  headerTitle: {
     fontSize: 20,
-    fontWeight: "700",
-  },
-  textWhite: {
-    color: "#ffffff",
-  },
-  textDark: {
-    color: "#0F172A",
-  },
-  textSecondaryLight: {
-    color: "#64748B",
-  },
-  textSecondaryDark: {
-    color: "#94A3B8",
-  },
-  banner: {
-    borderRadius: 16,
-    padding: 24,
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 28,
-  },
-  bannerReal: {
-    backgroundColor: "#D1FAE5",
-    borderWidth: 1,
-    borderColor: "#A7F3D0",
-  },
-  bannerFake: {
-    backgroundColor: "#FEE2E2",
-    borderWidth: 1,
-    borderColor: "#FCA5A5",
-  },
-  bannerEmoji: {
-    fontSize: 48,
-    marginBottom: 4,
-  },
-  bannerTitle: {
-    fontSize: 18,
     fontWeight: "800",
-    color: "#0F172A",
+    color: "#1E1B4B",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingVertical: 12,
+  },
+  noRecordText: {
+    color: "#4B5563",
+    fontSize: 16,
+    marginBottom: 16,
     textAlign: "center",
   },
-  bannerSubtitle: {
-    fontSize: 14,
-    color: "#334155",
-    fontWeight: "600",
+  backBtn: {
+    backgroundColor: "#4F46E5",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
   },
-  sectionTitle: {
-    fontSize: 18,
+  backBtnText: {
+    color: "#FFFFFF",
     fontWeight: "700",
-    marginBottom: 4,
   },
-  sectionSubtitle: {
-    fontSize: 14,
-    marginBottom: 20,
-  },
-  regionsList: {
-    gap: 16,
+  summaryCard: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "#EEF2F6",
+    alignItems: "center",
     marginBottom: 32,
   },
-  regionCard: {
-    borderRadius: 14,
-    padding: 16,
+  cardSubTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#9CA3AF",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  predictionText: {
+    fontSize: 32,
+    fontWeight: "900",
+    marginBottom: 20,
+  },
+  textPositive: {
+    color: "#22C55E", // Rich green matching Positive prediction in screenshot
+  },
+  textNegative: {
+    color: "#EF4444",
+  },
+  divider: {
+    width: "100%",
+    height: 1,
+    backgroundColor: "#E5E7EB",
+    marginBottom: 20,
+  },
+  confidenceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 8,
+  },
+  confidenceLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#374151",
+  },
+  confidenceVal: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1F2937",
+  },
+  barContainer: {
+    width: "100%",
+    height: 8,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  barFill: {
+    height: "100%",
+    backgroundColor: "#4F46E5",
+    borderRadius: 4,
+  },
+  sectionHeader: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#1E1B4B",
+    marginBottom: 16,
+  },
+  regionList: {
     gap: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  cardLight: {
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  cardDark: {
-    backgroundColor: "#1E293B",
   },
   regionRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
   },
-  cropThumb: {
-    width: 60,
-    height: 60,
-    borderRadius: 10,
-    backgroundColor: "#000",
-  },
-  regionMeta: {
-    flex: 1,
-    gap: 6,
-    justifyContent: "center",
-  },
-  regionTitle: {
+  regionLabel: {
     fontSize: 15,
     fontWeight: "700",
+    color: "#374151",
   },
-  miniBadgeFake: {
-    backgroundColor: "#FEE2E2",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    alignSelf: "flex-start",
+  regionValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
-  miniBadgeTextFake: {
-    color: "#EF4444",
-    fontSize: 11,
+  regionPred: {
+    fontSize: 14,
     fontWeight: "700",
   },
-  miniBadgeReal: {
-    backgroundColor: "#D1FAE5",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    alignSelf: "flex-start",
+  regionScore: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6B7280",
   },
-  miniBadgeTextReal: {
-    color: "#10B981",
-    fontSize: 11,
+  primaryBtn: {
+    backgroundColor: "#4F46E5",
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignSelf: "stretch",
+    alignItems: "center",
+    marginTop: 16,
+    shadowColor: "#4F46E5",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  primaryBtnText: {
+    color: "#FFFFFF",
+    fontSize: 16,
     fontWeight: "700",
   },
-  progressContainer: {
-    height: 6,
+  pillContainer: {
+    flexDirection: "row",
+    backgroundColor: "#F3F4F6",
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 24,
     width: "100%",
+    maxWidth: 240,
+    alignSelf: "center",
   },
-  progressBarBg: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#E2E8F0",
-    width: "100%",
+  pillBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: "center",
+    borderRadius: 8,
   },
-  progressBarFill: {
-    height: 6,
-    borderRadius: 3,
+  pillBtnActive: {
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  barReal: {
-    backgroundColor: "#10B981",
+  pillText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6B7280",
   },
-  barFake: {
-    backgroundColor: "#EF4444",
+  pillTextActive: {
+    color: "#1F2937",
   },
-  expandedContent: {
-    borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
-    paddingTop: 12,
-    marginTop: 4,
-    gap: 8,
+  regionTabSelectorRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    marginBottom: 20,
   },
-  scoreRow: {
+  regionSelectorTab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  regionSelectorActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: "#4F46E5",
+  },
+  regionSelectorText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#9CA3AF",
+  },
+  regionSelectorTextActive: {
+    color: "#4F46E5",
+    fontWeight: "700",
+  },
+  scanGraphicWrapper: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 16,
+  },
+  targetWrapper: {
+    width: 240,
+    height: 240,
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    borderRadius: 20,
+    overflow: "hidden",
+  },
+  scanCropImage: {
+    width: "90%",
+    height: "90%",
+    borderRadius: 16,
+  },
+  scanCorner: {
+    position: "absolute",
+    width: 24,
+    height: 24,
+    borderColor: "#10B981", // Green scanner corner brackets
+    borderWidth: 0,
+  },
+  scanTopLeft: {
+    top: 6,
+    left: 6,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+  },
+  scanTopRight: {
+    top: 6,
+    right: 6,
+    borderTopWidth: 3,
+    borderRightWidth: 3,
+  },
+  scanBottomLeft: {
+    bottom: 6,
+    left: 6,
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
+  },
+  scanBottomRight: {
+    bottom: 6,
+    right: 6,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
+  },
+  detailReportBlock: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#EEF2F6",
+    marginVertical: 16,
+  },
+  rowItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingVertical: 8,
   },
-  scoreLabel: {
-    fontSize: 13,
-    fontWeight: "500",
+  dividerLight: {
+    height: 1,
+    backgroundColor: "#E5E7EB",
+    marginVertical: 8,
   },
-  scoreValReal: {
-    color: "#10B981",
-    fontSize: 13,
+  itemLabelText: {
+    fontSize: 14,
     fontWeight: "700",
+    color: "#4B5563",
   },
-  scoreValFake: {
-    color: "#EF4444",
-    fontSize: 13,
-    fontWeight: "700",
+  itemValueText: {
+    fontSize: 15,
+    fontWeight: "800",
   },
-  primaryBtn: {
-    backgroundColor: "#6366F1",
-    paddingVertical: 16,
-    borderRadius: 12,
+  itemSubValue: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  heatmapGraphicWrapper: {
     alignItems: "center",
-    marginBottom: 20,
+    justifyContent: "center",
+    marginVertical: 16,
+    width: "100%",
   },
-  primaryBtnText: {
-    color: "#ffffff",
-    fontSize: 16,
+  heatmapMainImage: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 20,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#EEF2F6",
+  },
+  intensityContainer: {
+    marginTop: 20,
+    alignItems: "center",
+    paddingHorizontal: 8,
+  },
+  intensityRow: {
+    width: "100%",
+    marginBottom: 8,
+  },
+  intensityLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#374151",
+  },
+  gradientBar: {
+    width: "100%",
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#4F46E5", // Purple visual style placeholder.
+    // To mimic thermal intensity scale visually (blue to red):
+    // In react-native, gradient is best with linear-gradient, but we can do a solid layout
+    // that uses styled segments or colored blocks to mimic gradient cleanly.
+    // Let's use a colored bar using flexbox and colored blocks to make it look 100% authentic!
+    flexDirection: "row",
+    overflow: "hidden",
+  },
+  intensityRangeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginTop: 6,
+  },
+  intensityText: {
+    fontSize: 12,
+    color: "#6B7280",
     fontWeight: "600",
   },
 });

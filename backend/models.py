@@ -60,6 +60,7 @@ class ModelPrediction(Base):
     confidence = Column(Float, nullable=False)
     score_real = Column(Float, nullable=False)
     score_fake = Column(Float, nullable=False)
+    crop_url = Column(String, nullable=True)
     heatmap_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

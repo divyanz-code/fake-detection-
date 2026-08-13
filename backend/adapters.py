@@ -91,6 +91,7 @@ class BaseModelAdapter(ABC):
         """
         Runs model inference on the preprocessed crop.
         Returns a standardised output dictionary.
+        Target labels mapping: Index 0 -> fake, Index 1 -> real
         """
         if self.model is None:
             raise RuntimeError(f"Model '{self.name}' is not loaded.")
@@ -100,9 +101,9 @@ class BaseModelAdapter(ABC):
         # Run prediction [batch_size, num_classes]
         predictions = self.model.predict(preprocessed, verbose=0)[0]
         
-        # Target labels mapping: Index 0 -> real, Index 1 -> fake
-        score_real = float(predictions[0])
-        score_fake = float(predictions[1])
+        # Alphabetical class order in Keras: Index 0 -> fake, Index 1 -> real
+        score_fake = float(predictions[0])
+        score_real = float(predictions[1])
         
         prediction_class = "real" if score_real >= score_fake else "fake"
         confidence = score_real if prediction_class == "real" else score_fake
@@ -134,7 +135,6 @@ class BaseModelAdapter(ABC):
                     conv_layer_name = layer.name
                     break
             
-            # If no convolutional layer is found, this architecture does not support standard Grad-CAM
             if not conv_layer_name:
                 logger.warning(f"Grad-CAM not supported for '{self.name}': no Conv2D layer found.")
                 return None
@@ -146,7 +146,6 @@ class BaseModelAdapter(ABC):
             is_sequential = "sequential" in str(type(self.model)).lower()
 
             if is_sequential:
-                # For Sequential models, run layers sequentially inside tape to get intermediate outputs
                 with tf.GradientTape() as tape:
                     x = preprocessed_img
                     conv_outputs = None
@@ -161,7 +160,6 @@ class BaseModelAdapter(ABC):
                 grads = tape.gradient(loss, conv_outputs)
                 conv_outputs_val = conv_outputs[0]
             else:
-                # For Functional models, use sub-model mapping
                 grad_model = tf.keras.models.Model(
                     inputs=self.model.inputs,
                     outputs=[self.model.get_layer(conv_layer_name).output, self.model.output]
@@ -174,30 +172,34 @@ class BaseModelAdapter(ABC):
                 grads = tape.gradient(loss, conv_outputs)
                 conv_outputs_val = conv_outputs[0]
 
-            # 4. Global average pool the gradients along spatial dimensions (height, width)
+            # 4. Global average pool the gradients along spatial dimensions
             pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
 
-            # 5. Multiply the conv output features by their respective gradient weights
+            # 5. Multiply the conv output features by gradient weights
             heatmap = conv_outputs_val @ pooled_grads[..., tf.newaxis]
             heatmap = tf.squeeze(heatmap)
 
-            # 6. Apply ReLU (we only care about positive attribution) and normalize between 0 and 1
+            # 6. Apply ReLU and normalize between 0 and 1
             heatmap = tf.maximum(heatmap, 0.0)
-            max_val = tf.reduce_max(heatmap)
-            if max_val > 0:
-                heatmap = heatmap / max_val
-            
             heatmap_numpy = heatmap.numpy()
+
+            # Apply Gaussian Blur to smooth heatmap visualization
+            heatmap_blurred = cv2.GaussianBlur(heatmap_numpy, (15, 15), 0)
+            max_val = np.max(heatmap_blurred)
+            if max_val > 0:
+                heatmap_norm = heatmap_blurred / max_val
+            else:
+                heatmap_norm = heatmap_blurred
 
             # 7. Resize the heatmap back to the original crop image dimensions
             h, w = crop_image.shape[:2]
-            heatmap_resized = cv2.resize(heatmap_numpy, (w, h))
+            heatmap_resized = cv2.resize(heatmap_norm, (w, h))
 
             # 8. Convert to uint8 and apply JET colormap
             heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap_resized), cv2.COLORMAP_JET)
 
-            # 9. Superimpose the colormap onto the original crop (60% original, 40% heatmap)
-            superimposed_img = cv2.addWeighted(crop_image, 0.6, heatmap_color, 0.4, 0)
+            # 9. Superimpose the colormap onto the original crop (50% original, 50% heatmap)
+            superimposed_img = cv2.addWeighted(crop_image, 0.5, heatmap_color, 0.5, 0)
             return superimposed_img
 
         except Exception as e:

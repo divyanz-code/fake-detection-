@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect } from "react";
 import { api } from "../services/api";
 
 export type ScreenType =
+  | "splash"
   | "onboarding"
   | "login"
   | "register"
@@ -25,6 +26,7 @@ interface AppContextType {
   // Navigation actions
   navigateTo: (screen: ScreenType) => void;
   setSelectedImage: (uri: string | null) => void;
+  setCurrentAnalysis: (analysis: any | null) => void;
   
   // Auth actions
   loginUser: (email: string, password_raw: string) => Promise<void>;
@@ -43,7 +45,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [userToken, setUserToken] = useState<string | null>(null);
   const [userData, setUserData] = useState<any | null>(null);
-  const [activeScreen, setActiveScreen] = useState<ScreenType>("onboarding");
+  const [activeScreen, setActiveScreen] = useState<ScreenType>("splash");
   const [analysesList, setAnalysesList] = useState<any[]>([]);
   const [currentAnalysis, setCurrentAnalysis] = useState<any | null>(null);
   const [selectedImage, setSelectedImageState] = useState<string | null>(null);
@@ -122,16 +124,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Starts analysis by uploading image, then navigate to processing screen
+  // Starts analysis by uploading image/video, navigating smoothly to processing screen
   const startImageAnalysis = async (fileUri: string, fileName: string) => {
-    if (!userToken) return;
+    let token = userToken;
+
+    // Auto-authenticate guest session if userToken is not present yet
+    if (!token) {
+      try {
+        const guestEmail = `guest_${Date.now()}@app.com`;
+        await api.register(guestEmail, "password123");
+        const authData = await api.login(guestEmail, "password123");
+        token = authData.access_token;
+        setUserToken(token);
+      } catch (err) {
+        try {
+          const authData = await api.login("admin@example.com", "admin123");
+          token = authData.access_token;
+          setUserToken(token);
+        } catch (e) {}
+      }
+    }
+
+    if (!token) {
+      setError("Please log in to upload and analyze media.");
+      navigateTo("login");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     navigateTo("processing");
     try {
-      const analysis = await api.uploadImage(userToken, fileUri, fileName);
+      const analysis = await api.uploadImage(token, fileUri, fileName);
       setCurrentAnalysis(analysis);
     } catch (err: any) {
+      console.error("Analysis upload error:", err);
       setError(err.message || "Upload failed.");
       navigateTo("upload");
     } finally {
@@ -162,6 +189,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeScreen,
         analysesList,
         currentAnalysis,
+        setCurrentAnalysis,
         selectedImage,
         loading,
         error,

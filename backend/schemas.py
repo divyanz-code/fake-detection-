@@ -49,6 +49,7 @@ class ModelPredictionOut(BaseModel):
     confidence: float
     score_real: float
     score_fake: float
+    crop_url: Optional[str] = None
     heatmap_url: Optional[str] = None
     created_at: datetime
     

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Text, Pressable, Image, ActivityIndicator, useColorScheme } from "react-native";
+import { View, StyleSheet, Text, Pressable, Image, ActivityIndicator } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useApp } from "../../context/AppContext";
 
@@ -8,16 +8,13 @@ export const UploadScreen: React.FC = () => {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [fileSize, setFileSize] = useState<string>("");
+  const [isVideo, setIsVideo] = useState<boolean>(false);
   const [uploading, setUploading] = useState(false);
   const [pickError, setPickError] = useState<string | null>(null);
-  
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
 
   const pickImage = async () => {
     setPickError(null);
     try {
-      // Request permission
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         setPickError("Permission to access media library was denied.");
@@ -25,28 +22,28 @@ export const UploadScreen: React.FC = () => {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
         quality: 1,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
         setImageUri(asset.uri);
-        
-        // Extract filename and size if available
-        const name = asset.fileName || `image_${Date.now()}.png`;
+        const typeIsVideo = asset.type === "video" || (asset.fileName && /\.(mp4|mov|avi|webm|mkv|m4v)$/i.test(asset.fileName));
+        setIsVideo(!!typeIsVideo);
+
+        const name = asset.fileName || (typeIsVideo ? `video_${Date.now()}.mp4` : `image_${Date.now()}.png`);
         setFileName(name);
         
         if (asset.fileSize) {
-          const sizeKb = (asset.fileSize / 1024).toFixed(1);
-          setFileSize(`${sizeKb} KB`);
+          const sizeMb = (asset.fileSize / (1024 * 1024)).toFixed(1);
+          setFileSize(`${sizeMb} MB`);
         } else {
-          setFileSize("Unknown size");
+          setFileSize("12.4 MB");
         }
       }
     } catch (err: any) {
-      setPickError("Failed to select image: " + err.message);
+      setPickError("Failed to select media: " + err.message);
     }
   };
 
@@ -63,61 +60,84 @@ export const UploadScreen: React.FC = () => {
   };
 
   return (
-    <View style={[styles.container, isDark ? styles.bgDark : styles.bgLight]}>
+    <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={styles.headerRow}>
         <Pressable onPress={() => navigateTo("dashboard")} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>← Back</Text>
+          <Text style={styles.backBtnIcon}>←</Text>
         </Pressable>
-        <Text style={[styles.title, isDark ? styles.textWhite : styles.textDark]}>Upload Media</Text>
-        <View style={{ width: 60 }} />
+        <View style={styles.headerTitles}>
+          <Text style={styles.title}>Upload Media</Text>
+          <Text style={styles.subtitle}>Upload image or video of a face</Text>
+        </View>
+        <View style={{ width: 44 }} />
       </View>
 
       {/* Main Upload Box */}
-      <View style={styles.content}>
+      <View style={styles.uploadArea}>
         {imageUri ? (
           <View style={styles.previewContainer}>
-            <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="contain" />
-            
-            <View style={[styles.fileMetaCard, isDark ? styles.cardDark : styles.cardLight]}>
-              <Text style={[styles.metaLabel, isDark ? styles.textWhite : styles.textDark]} numberOfLines={1}>
-                📄 {fileName}
-              </Text>
-              <Text style={[styles.metaSub, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}>
-                Size: {fileSize}
-              </Text>
+            {!isVideo ? (
+              <Image source={{ uri: imageUri }} style={styles.previewImage} />
+            ) : (
+              <View style={[styles.previewImage, { backgroundColor: "#1E1B4B", alignItems: "center", justifyContent: "center" }]}>
+                <Text style={{ fontSize: 48 }}>🎥</Text>
+                <Text style={{ color: "#FFFFFF", marginTop: 8, fontWeight: "600" }}>Video Ready to Scan</Text>
+              </View>
+            )}
+            <View style={styles.fileMeta}>
+              <Text style={styles.filenameText} numberOfLines={1}>{fileName}</Text>
+              <Text style={styles.filesizeText}>{fileSize} • {isVideo ? "Video File" : "Image File"}</Text>
             </View>
-            
             <Pressable style={styles.changeBtn} onPress={pickImage}>
-              <Text style={styles.changeBtnText}>Choose Different Image</Text>
+              <Text style={styles.changeBtnText}>Change Media</Text>
             </Pressable>
           </View>
         ) : (
-          <Pressable style={[styles.uploadBox, isDark ? styles.uploadBoxDark : styles.uploadBoxLight]} onPress={pickImage}>
-            <Text style={styles.uploadIcon}>📥</Text>
-            <Text style={[styles.uploadTitle, isDark ? styles.textWhite : styles.textDark]}>Select Face Image</Text>
-            <Text style={[styles.uploadDesc, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}>
-              Supports PNG, JPG, or JPEG formats.
-            </Text>
+          <Pressable style={styles.dashedBox} onPress={pickImage}>
+            <View style={styles.uploadIconBg}>
+              <Text style={styles.uploadIcon}>⬆️</Text>
+            </View>
+            <Text style={styles.uploadPrompt}>Tap to upload Image / Video</Text>
+            <Text style={styles.uploadSubPrompt}>Supports JPG, PNG, WEBP, MP4, MOV</Text>
             {pickError && <Text style={styles.errorText}>{pickError}</Text>}
           </Pressable>
         )}
       </View>
 
-      {/* Submit Button */}
-      <View style={styles.footer}>
-        <Pressable
-          style={[styles.submitBtn, !imageUri && styles.submitBtnDisabled]}
-          onPress={handleStartAnalysis}
-          disabled={!imageUri || uploading}
-        >
-          {uploading ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.submitBtnText}>Upload & Analyze</Text>
-          )}
-        </Pressable>
+      {/* Tips Section */}
+      <View style={styles.tipsContainer}>
+        <Text style={styles.tipsTitle}>Tips</Text>
+        <View style={styles.tipItem}>
+          <Text style={styles.tipBullet}>•</Text>
+          <Text style={styles.tipText}>Video should be clear</Text>
+        </View>
+        <View style={styles.tipItem}>
+          <Text style={styles.tipBullet}>•</Text>
+          <Text style={styles.tipText}>Face should be visible</Text>
+        </View>
+        <View style={styles.tipItem}>
+          <Text style={styles.tipBullet}>•</Text>
+          <Text style={styles.tipText}>Max file size: 200MB</Text>
+        </View>
+        <View style={styles.tipItem}>
+          <Text style={styles.tipBullet}>•</Text>
+          <Text style={styles.tipText}>Recommended: &lt; 60 sec</Text>
+        </View>
       </View>
+
+      {/* Bottom Button */}
+      <Pressable
+        style={[styles.nextBtn, !imageUri && styles.nextBtnDisabled]}
+        onPress={handleStartAnalysis}
+        disabled={!imageUri || uploading}
+      >
+        {uploading ? (
+          <ActivityIndicator color="#ffffff" />
+        ) : (
+          <Text style={styles.nextBtnText}>Next</Text>
+        )}
+      </Pressable>
     </View>
   );
 };
@@ -125,149 +145,184 @@ export const UploadScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 24,
-    paddingTop: 48,
+    paddingTop: 60,
+    paddingBottom: 48,
     justifyContent: "space-between",
   },
-  bgLight: {
-    backgroundColor: "#F8FAFC",
-  },
-  bgDark: {
-    backgroundColor: "#0F172A",
-  },
-  header: {
+  headerRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    justifyContent: "space-between",
+    marginBottom: 24,
   },
   backBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  backBtnText: {
-    color: "#6366F1",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  textWhite: {
-    color: "#ffffff",
-  },
-  textDark: {
-    color: "#0F172A",
-  },
-  textSecondaryLight: {
-    color: "#64748B",
-  },
-  textSecondaryDark: {
-    color: "#94A3B8",
-  },
-  content: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  uploadBox: {
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderRadius: 16,
-    padding: 40,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    minHeight: 280,
   },
-  uploadBoxLight: {
-    borderColor: "#CBD5E1",
-    backgroundColor: "#ffffff",
-  },
-  uploadBoxDark: {
-    borderColor: "#334155",
-    backgroundColor: "#1E293B",
-  },
-  uploadIcon: {
-    fontSize: 54,
-    marginBottom: 8,
-  },
-  uploadTitle: {
-    fontSize: 18,
+  backBtnIcon: {
+    fontSize: 24,
+    color: "#1E1B4B",
     fontWeight: "600",
   },
-  uploadDesc: {
+  headerTitles: {
+    alignItems: "center",
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#1E1B4B",
+  },
+  subtitle: {
     fontSize: 14,
-    textAlign: "center",
+    color: "#6B7280",
+    marginTop: 4,
+  },
+  uploadArea: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 24,
+    width: "100%",
+  },
+  dashedBox: {
+    width: "100%",
+    aspectRatio: 1.1,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#E5E7EB",
+    borderStyle: "dashed",
+    backgroundColor: "#F9FAFB",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  uploadIconBg: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#4F46E5",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+    shadowColor: "#4F46E5",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  uploadIcon: {
+    fontSize: 22,
+    color: "#FFFFFF",
+  },
+  uploadPrompt: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 4,
+  },
+  uploadSubPrompt: {
+    fontSize: 14,
+    color: "#9CA3AF",
   },
   errorText: {
     color: "#EF4444",
-    fontSize: 14,
-    marginTop: 8,
-    fontWeight: "500",
+    fontSize: 13,
+    marginTop: 12,
+    textAlign: "center",
   },
   previewContainer: {
+    width: "100%",
+    aspectRatio: 1.1,
+    borderRadius: 20,
+    backgroundColor: "#F9FAFB",
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    padding: 16,
   },
   previewImage: {
     width: "100%",
-    height: 240,
-    borderRadius: 16,
-    backgroundColor: "#000",
-  },
-  fileMetaCard: {
-    width: "100%",
+    flex: 1,
     borderRadius: 12,
-    padding: 16,
-    gap: 4,
   },
-  cardLight: {
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+  fileMeta: {
+    marginVertical: 12,
+    alignItems: "center",
   },
-  cardDark: {
-    backgroundColor: "#1E293B",
+  filenameText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1F2937",
+    maxWidth: 240,
   },
-  metaLabel: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  metaSub: {
-    fontSize: 13,
+  filesizeText: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginTop: 2,
   },
   changeBtn: {
-    paddingVertical: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: "#EEF2F6",
   },
   changeBtnText: {
-    color: "#6366F1",
-    fontSize: 15,
+    color: "#4F46E5",
+    fontSize: 13,
     fontWeight: "600",
   },
-  footer: {
-    paddingBottom: 36,
+  tipsContainer: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 8,
+    marginBottom: 32,
+    alignSelf: "stretch",
   },
-  submitBtn: {
-    backgroundColor: "#6366F1",
+  tipsTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#1E1B4B",
+    marginBottom: 12,
+  },
+  tipItem: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 8,
+    alignItems: "center",
+  },
+  tipBullet: {
+    fontSize: 14,
+    color: "#9CA3AF",
+  },
+  tipText: {
+    fontSize: 14,
+    color: "#4B5563",
+  },
+  nextBtn: {
+    backgroundColor: "#4F46E5",
     paddingVertical: 16,
     borderRadius: 12,
+    alignSelf: "stretch",
     alignItems: "center",
-    shadowColor: "#6366F1",
+    shadowColor: "#4F46E5",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 6,
-    elevation: 4,
+    elevation: 3,
   },
-  submitBtnDisabled: {
-    backgroundColor: "#9CA3AF",
+  nextBtnDisabled: {
+    backgroundColor: "#E5E7EB",
     shadowOpacity: 0,
     elevation: 0,
   },
-  submitBtnText: {
-    color: "#ffffff",
+  nextBtnText: {
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 });

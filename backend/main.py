@@ -133,13 +133,16 @@ def upload_image(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    # Verify file extension
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in [".jpg", ".jpeg", ".png"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported image format. Use JPG, JPEG, or PNG."
-        )
+    # Verify file extension & media type
+    ext = os.path.splitext(file.filename)[1].lower() if file.filename else ""
+    if not ext:
+        ext = ".png"
+
+    image_exts = [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"]
+    video_exts = [".mp4", ".mov", ".avi", ".webm", ".mkv", ".m4v"]
+
+    is_video = ext in video_exts
+    is_image = ext in image_exts or not is_video
 
     # Generate unique filename to avoid collisions
     unique_filename = f"{uuid.uuid4()}{ext}"
@@ -158,17 +161,18 @@ def upload_image(
     # Get file size
     size_bytes = os.path.getsize(file_path)
     
-    # Upload original image to Cloudinary (falls back to local static serving if credentials are unset)
+    # Upload original file to Cloudinary (falls back to local static serving if credentials are unset)
     try:
         file_url = upload_file_to_cloud(file_path, folder="fake_detection_uploads")
     except Exception as e:
         file_url = f"/static/{unique_filename}"
     
     # Create Media record
+    media_type_str = "video" if is_video else "image"
     db_media = models.Media(
-        filename=file.filename,
+        filename=file.filename or unique_filename,
         file_url=file_url,
-        file_type="image",
+        file_type=media_type_str,
         size_bytes=size_bytes,
         user_id=current_user.id
     )
@@ -195,9 +199,37 @@ def upload_image(
             detail="Facial feature extractor is unavailable."
         )
 
-    # 4. Run preprocessing & feature extraction pipeline
+    # 4. Determine target image path for feature extraction
+    target_image_path = file_path
+
+    if is_video:
+        # Extract a frame with face landmarks from the uploaded video
+        cap = cv2.VideoCapture(file_path)
+        frame_idx = 0
+        best_frame = None
+
+        while cap.isOpened() and frame_idx < 150:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            if frame_idx % 5 == 0:
+                landmarks = extractor._get_landmarks(frame)
+                if landmarks is not None:
+                    best_frame = frame
+                    break
+                if best_frame is None:
+                    best_frame = frame
+            frame_idx += 1
+        cap.release()
+
+        if best_frame is not None:
+            frame_filename = f"frame_{unique_filename}.png"
+            target_image_path = os.path.join(UPLOAD_DIR, frame_filename)
+            cv2.imwrite(target_image_path, best_frame)
+
+    # 5. Run preprocessing & feature extraction pipeline
     try:
-        results = extractor.preprocess_pipeline(file_path)
+        results = extractor.preprocess_pipeline(target_image_path)
     except Exception as e:
         db_analysis.status = "failed"
         db.commit()
@@ -207,13 +239,16 @@ def upload_image(
         )
 
     if results is None:
-        # Preprocessing completed but no face was found
-        db_analysis.status = "failed"
-        db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="No face detected in the uploaded image."
-        )
+        try:
+            raw_img = cv2.imread(target_image_path)
+            results = extractor._fallback_face_crop(raw_img)
+        except Exception:
+            db_analysis.status = "failed"
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="No face detected in the uploaded file."
+            )
 
     # Save preprocessed crops locally and upload them
     crop_urls = {}
@@ -285,6 +320,7 @@ def upload_image(
             confidence=pred["confidence"],
             score_real=pred["scores"]["real"],
             score_fake=pred["scores"]["fake"],
+            crop_url=crop_urls.get(pred["model"]),
             heatmap_url=heatmap_url
         )
         db.add(db_pred)
