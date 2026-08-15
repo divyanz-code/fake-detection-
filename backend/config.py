@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings:
-    PROJECT_NAME: str = "Face Analysis App API"
+    PROJECT_NAME: str = "Deep Fake Investigation API"
     API_V1_STR: str = "/api/v1"
     
     # Security config
