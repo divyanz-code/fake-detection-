@@ -14,7 +14,7 @@ export const OnboardingScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Title & Subtitle */}
       <View style={styles.headerContainer}>
-        <Text style={styles.title}>AI Face Analysis</Text>
+        <Text style={styles.title}>Deep Fake Investigation</Text>
         <Text style={styles.subtitle}>
           We analyze key facial regions for accurate predictions.
         </Text>

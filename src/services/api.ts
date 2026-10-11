@@ -93,13 +93,13 @@ export const api = {
     const mimeType = isVideo ? `video/${ext === 'mov' ? 'quicktime' : ext}` : `image/${ext === 'jpg' || ext === 'jpeg' ? 'jpeg' : 'png'}`;
     const targetName = fileName || (isVideo ? `upload_${Date.now()}.mp4` : `upload_${Date.now()}.png`);
 
-    if (Platform.OS === "web" && (fileUri.startsWith("blob:") || fileUri.startsWith("data:"))) {
+    try {
       const res = await fetch(fileUri);
       const blob = await res.blob();
       formData.append("file", blob, targetName);
-    } else {
+    } catch {
       formData.append("file", {
-        uri: fileUri,
+        uri: Platform.OS === "android" ? fileUri : fileUri.replace("file://", ""),
         name: targetName,
         type: mimeType,
       } as any);

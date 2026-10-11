@@ -38,7 +38,7 @@ export const SplashScreen: React.FC = () => {
 
       {/* Brand & Subtitle */}
       <View style={styles.textContainer}>
-        <Text style={styles.title}>Face Analysis</Text>
+        <Text style={styles.title}>Deep Fake Investigation</Text>
         <Text style={styles.subtitle}>AI-Powered Face Region Analysis</Text>
       </View>
 

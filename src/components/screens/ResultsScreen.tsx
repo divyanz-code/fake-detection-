@@ -282,6 +282,7 @@ export const ResultsScreen: React.FC = () => {
   };
 
   // 3. RENDER SCREEN 11: HEATMAP VIEW
+  // 3. RENDER SCREEN 11: HEATMAP VIEW
   const renderHeatmapScreen = () => {
     let activeMetric = metrics[regionTab] || metrics.face;
     let localImage: any = require("../../../assets/images/onboarding_avatar.png");
@@ -295,6 +296,17 @@ export const ResultsScreen: React.FC = () => {
     const heatmapSource = activeMetric?.heatmap_url 
       ? { uri: api.getBackendUrl(activeMetric.heatmap_url) } 
       : require("../../../assets/images/heatmap_face.png");
+
+    // Check if current region evaluated as Negative (Fake / Deepfake)
+    const isNegativeRegion = activeMetric?.prediction === "Fake" || activeMetric?.prediction === "fake";
+    
+    // Check if any sub-region of face is fake when looking at whole face
+    const anyRegionFake = isNegativeRegion || 
+      (regionTab === "face" && (
+        metrics.eye?.prediction?.toLowerCase() === "fake" ||
+        metrics.nose?.prediction?.toLowerCase() === "fake" ||
+        metrics.lips?.prediction?.toLowerCase() === "fake"
+      ));
 
     return (
       <View style={styles.subScreenContainer}>
@@ -324,9 +336,24 @@ export const ResultsScreen: React.FC = () => {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* Status Badge indicating Negative (Fake) vs Positive (Real) region */}
+          {anyRegionFake ? (
+            <View style={styles.statusBadgeNegative}>
+              <Text style={styles.statusBadgeTextNegative}>
+                ⚠️ Deepfake Manipulation Detected in {regionTab.toUpperCase()}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.statusBadgePositive}>
+              <Text style={styles.statusBadgeTextPositive}>
+                ✓ Verified Real - No Manipulation Detected
+              </Text>
+            </View>
+          )}
+
           {/* Main Graphic Box showing scanned region / thermal overlay */}
           <View style={styles.heatmapGraphicWrapper}>
-            {heatmapToggle === "heatmap" ? (
+            {heatmapToggle === "heatmap" && anyRegionFake ? (
               <Image 
                 source={heatmapSource} 
                 style={styles.heatmapMainImage} 
@@ -341,11 +368,11 @@ export const ResultsScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Intensity Color Bar (Only visible in Heatmap tab) */}
-          {heatmapToggle === "heatmap" && (
+          {/* Display Intensity Bar for Negative parts, or Explanation Card for Real parts */}
+          {heatmapToggle === "heatmap" && anyRegionFake ? (
             <View style={styles.intensityContainer}>
               <View style={styles.intensityRow}>
-                <Text style={styles.intensityLabel}>Intensity</Text>
+                <Text style={styles.intensityLabel}>Manipulation Artifact Intensity</Text>
               </View>
               <View style={styles.gradientBar}>
                 <View style={{ flex: 1, backgroundColor: "#3B82F6" }} />
@@ -354,9 +381,18 @@ export const ResultsScreen: React.FC = () => {
                 <View style={{ flex: 1, backgroundColor: "#EF4444" }} />
               </View>
               <View style={styles.intensityRangeRow}>
-                <Text style={styles.intensityText}>Low</Text>
-                <Text style={styles.intensityText}>High</Text>
+                <Text style={styles.intensityText}>Low Risk</Text>
+                <Text style={styles.intensityText}>High Manipulation</Text>
               </View>
+            </View>
+          ) : (
+            <View style={styles.heatmapStatusCard}>
+              <Text style={styles.statusInfoTitle}>Region Analysis Note</Text>
+              <Text style={styles.statusInfoText}>
+                {anyRegionFake
+                  ? "Showing clean original image crop for comparison."
+                  : "Heatmaps are generated specifically for facial parts that test negative (fake). Since this part passed as Real, no manipulation heatmap is shown."}
+              </Text>
             </View>
           )}
         </ScrollView>
@@ -747,5 +783,56 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6B7280",
     fontWeight: "600",
+  },
+  statusBadgeNegative: {
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    alignItems: "center",
+  },
+  statusBadgePositive: {
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    alignItems: "center",
+  },
+  statusBadgeTextNegative: {
+    color: "#DC2626",
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  statusBadgeTextPositive: {
+    color: "#16A34A",
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  heatmapStatusCard: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+  },
+  statusInfoTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1E293B",
+    marginBottom: 4,
+  },
+  statusInfoText: {
+    fontSize: 13,
+    color: "#64748B",
+    lineHeight: 18,
   },
 });

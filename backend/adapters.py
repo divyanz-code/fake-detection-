@@ -154,7 +154,8 @@ class BaseModelAdapter(ABC):
                         if layer.name == conv_layer_name:
                             conv_outputs = x
                     
-                    class_channel = tf.argmax(x[0])
+                    # Target class index 0 (fake/negative class) for deepfake artifact Grad-CAM
+                    class_channel = 0
                     loss = x[:, class_channel]
                 
                 grads = tape.gradient(loss, conv_outputs)
@@ -166,7 +167,8 @@ class BaseModelAdapter(ABC):
                 )
                 with tf.GradientTape() as tape:
                     conv_outputs, predictions = grad_model(preprocessed_img)
-                    class_channel = tf.argmax(predictions[0])
+                    # Target class index 0 (fake/negative class) for deepfake artifact Grad-CAM
+                    class_channel = 0
                     loss = predictions[:, class_channel]
                 
                 grads = tape.gradient(loss, conv_outputs)
