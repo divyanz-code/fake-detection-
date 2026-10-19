@@ -62,10 +62,11 @@ export const DashboardScreen: React.FC = () => {
     navigateTo("results");
   };
 
-  const getEmojiForType = (filename: string) => {
-    if (filename.includes("Eye")) return "👁️";
-    if (filename.includes("Nose")) return "👃";
-    return "👤";
+  const getTypeTag = (filename: string) => {
+    if (filename.includes("Eye")) return "EYE";
+    if (filename.includes("Nose")) return "NOSE";
+    if (filename.includes("Lip")) return "LIP";
+    return "FACE";
   };
 
   // Combine real database analyses (if any) with our high-fidelity mock ones for full UX coverage
@@ -91,12 +92,13 @@ export const DashboardScreen: React.FC = () => {
       {/* Hello Greeting Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Hello, {userData?.email?.split("@")[0] || "User"} 👋</Text>
+          <Text style={styles.greeting}>Hello, {userData?.email?.split("@")[0] || "User"}</Text>
           <Text style={styles.subGreeting}>Let's analyze a new video</Text>
         </View>
         <View style={styles.notificationBadgeContainer}>
           <Pressable style={styles.notificationBtn}>
-            <Text style={styles.notificationIcon}>🔔</Text>
+            <View style={styles.bellDome} />
+            <View style={styles.bellRim} />
           </Pressable>
           <View style={styles.activeDot} />
         </View>
@@ -106,14 +108,14 @@ export const DashboardScreen: React.FC = () => {
       <Pressable style={styles.actionCard} onPress={() => navigateTo("upload")}>
         <View style={styles.actionCardLeft}>
           <View style={styles.videoIconBg}>
-            <Text style={styles.videoIcon}>🎥</Text>
+            <View style={styles.playTriangle} />
           </View>
           <View>
             <Text style={styles.actionCardTitle}>New Analysis</Text>
             <Text style={styles.actionCardSub}>Upload video to start</Text>
           </View>
         </View>
-        <Text style={styles.arrowRight}>➔</Text>
+        <Text style={styles.arrowRight}>→</Text>
       </Pressable>
 
       {/* Section Divider */}
@@ -133,8 +135,8 @@ export const DashboardScreen: React.FC = () => {
             onPress={() => handleSelectAnalysis(item)}
           >
             <View style={styles.itemLeft}>
-              <View style={styles.emojiWrapper}>
-                <Text style={styles.itemEmoji}>{getEmojiForType(item.filename)}</Text>
+              <View style={styles.typeBadgeWrapper}>
+                <Text style={styles.typeBadgeText}>{getTypeTag(item.filename)}</Text>
               </View>
               <View>
                 <Text style={styles.itemFilename}>{item.filename}</Text>
@@ -195,8 +197,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  notificationIcon: {
-    fontSize: 18,
+  bellDome: {
+    width: 14,
+    height: 12,
+    borderTopLeftRadius: 7,
+    borderTopRightRadius: 7,
+    backgroundColor: "#475569",
+  },
+  bellRim: {
+    width: 18,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: "#475569",
+    marginTop: 1,
   },
   activeDot: {
     position: "absolute",
@@ -236,8 +249,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  videoIcon: {
-    fontSize: 22,
+  playTriangle: {
+    width: 0,
+    height: 0,
+    backgroundColor: "transparent",
+    borderStyle: "solid",
+    borderLeftWidth: 14,
+    borderRightWidth: 0,
+    borderBottomWidth: 9,
+    borderTopWidth: 9,
+    borderLeftColor: "#FFFFFF",
+    borderRightColor: "transparent",
+    borderTopColor: "transparent",
+    borderBottomColor: "transparent",
+    marginLeft: 3,
   },
   actionCardTitle: {
     color: "#FFFFFF",
@@ -293,16 +318,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 14,
   },
-  emojiWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#F8FAFC",
+  typeBadgeWrapper: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#EEF2FF",
     alignItems: "center",
     justifyContent: "center",
+    minWidth: 46,
   },
-  itemEmoji: {
-    fontSize: 20,
+  typeBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#4F46E5",
+    letterSpacing: 0.5,
   },
   itemFilename: {
     fontSize: 15,

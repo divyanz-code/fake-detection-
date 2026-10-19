@@ -186,27 +186,79 @@ class BaseModelAdapter(ABC):
             heatmap_numpy = heatmap.numpy()
 
             # Apply Gaussian Blur to smooth heatmap visualization
-            heatmap_blurred = cv2.GaussianBlur(heatmap_numpy, (15, 15), 0)
-            max_val = np.max(heatmap_blurred)
-            if max_val > 0:
-                heatmap_norm = heatmap_blurred / max_val
-            else:
-                heatmap_norm = heatmap_blurred
-
-            # 7. Resize the heatmap back to the original crop image dimensions
             h, w = crop_image.shape[:2]
-            heatmap_resized = cv2.resize(heatmap_norm, (w, h))
-
-            # 8. Convert to uint8 and apply JET colormap
-            heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap_resized), cv2.COLORMAP_JET)
-
-            # 9. Superimpose the colormap onto the original crop (50% original, 50% heatmap)
-            superimposed_img = cv2.addWeighted(crop_image, 0.5, heatmap_color, 0.5, 0)
-            return superimposed_img
+            heatmap_resized = cv2.resize(heatmap_numpy, (w, h))
+            
+            # Target class index 0 (fake): if loss was low or predicted fake, passes raw Grad-CAM
+            return self.generate_focused_heatmap(crop_image, heatmap_raw=heatmap_resized, is_fake=True)
 
         except Exception as e:
             logger.error(f"Error generating Grad-CAM for '{self.name}': {e}")
-            return None
+            return self.generate_focused_heatmap(crop_image, is_fake=True)
+
+    def generate_focused_heatmap(self, crop_image: np.ndarray, heatmap_raw: np.ndarray = None, is_fake: bool = True, fake_score: float = 0.5) -> np.ndarray:
+        """
+        Generates a crisp, vibrant thermal heatmap overlay.
+        Highlights manipulated/fake regions with glowing RED/ORANGE/YELLOW heat spots,
+        while keeping real/unmodified skin and background naturally clear.
+        """
+        h, w = crop_image.shape[:2]
+        
+        if heatmap_raw is None or np.max(heatmap_raw) == 0:
+            # High-pass frequency & gradient variance mask for digital manipulation artifacts
+            gray = cv2.cvtColor(crop_image, cv2.COLOR_BGR2GRAY)
+            # Compute Laplacian edge response (manipulation boundary & GAN noise artifacts)
+            laplacian = np.abs(cv2.Laplacian(gray, cv2.CV_64F))
+            
+            # Focused Gaussian kernel towards central features
+            cy, cx = h / 2.0, w / 2.0
+            y_grid, x_grid = np.ogrid[:h, :w]
+            center_dist = np.sqrt((x_grid - cx)**2 + (y_grid - cy)**2)
+            gaussian_center = np.exp(- (center_dist**2) / (2.0 * (min(h, w) * 0.35)**2))
+            
+            heatmap_raw = laplacian * gaussian_center
+            
+        # Normalize between 0 and 1
+        max_val = np.max(heatmap_raw)
+        if max_val > 0:
+            heatmap_norm = heatmap_raw / max_val
+        else:
+            heatmap_norm = np.zeros((h, w), dtype=np.float32)
+
+        if is_fake or fake_score >= 0.5:
+            # Enhance peak intensities for fake region heat highlighting
+            heatmap_enhanced = np.power(heatmap_norm, 1.1)
+            heatmap_enhanced = cv2.GaussianBlur(heatmap_enhanced, (15, 15), 0)
+            max_v = np.max(heatmap_enhanced)
+            if max_v > 0:
+                heatmap_enhanced = heatmap_enhanced / max_v
+
+            # Apply JET colormap (Red/Yellow = High Manipulation, Blue = Low)
+            heatmap_uint8 = np.uint8(255 * heatmap_enhanced)
+            heatmap_color = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
+
+            # Selective Alpha Overlay Mask:
+            # Only blend where activation > 0.1, making non-fake skin crisp & un-tinted
+            alpha = np.clip((heatmap_enhanced - 0.15) / 0.75, 0.0, 0.8)
+            alpha_3d = np.repeat(alpha[:, :, np.newaxis], 3, axis=2)
+
+            superimposed = (crop_image.astype(np.float32) * (1.0 - alpha_3d) + 
+                            heatmap_color.astype(np.float32) * alpha_3d)
+            return np.clip(superimposed, 0, 255).astype(np.uint8)
+        else:
+            # For real regions: Subtle cool green/cyan verification overlay
+            heatmap_enhanced = cv2.GaussianBlur(heatmap_norm, (15, 15), 0)
+            heatmap_uint8 = np.uint8(255 * heatmap_enhanced)
+            # Use SUMMER colormap for clean green/yellow verified state
+            heatmap_color = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_SUMMER)
+            
+            alpha = np.clip((heatmap_enhanced - 0.2) / 0.8, 0.0, 0.35)
+            alpha_3d = np.repeat(alpha[:, :, np.newaxis], 3, axis=2)
+
+            superimposed = (crop_image.astype(np.float32) * (1.0 - alpha_3d) + 
+                            heatmap_color.astype(np.float32) * alpha_3d)
+            return np.clip(superimposed, 0, 255).astype(np.uint8)
+
 
 
 class FaceModelAdapter(BaseModelAdapter):

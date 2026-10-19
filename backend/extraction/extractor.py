@@ -244,6 +244,40 @@ class FacialFeatureExtractor:
         bbox = (x1, y1, crop_w, crop_h)
         return cropped, bbox
 
+    def load_image(self, image_path):
+        """Loads an image reliably using OpenCV, falling back to PIL/ImageOps if needed."""
+        if not os.path.exists(image_path):
+            raise FileNotFoundError(f"Image not found at {image_path}")
+
+        # Check if file is suspiciously small (e.g. text error message)
+        file_size = os.path.getsize(image_path)
+        if file_size < 100:
+            content_preview = ""
+            try:
+                with open(image_path, "r", errors="ignore") as f:
+                    content_preview = f.read(100).strip()
+            except Exception:
+                pass
+            raise ValueError(f"Image file is invalid or corrupt (only {file_size} bytes). Content: '{content_preview}'")
+
+        # Try OpenCV first
+        image = cv2.imread(image_path)
+        if image is not None and image.size > 0:
+            return image
+
+        # Fallback to PIL in case OpenCV fails to decode format, color profile, or path
+        try:
+            from PIL import Image, ImageOps
+            with Image.open(image_path) as pil_img:
+                pil_img = ImageOps.exif_transpose(pil_img)
+                rgb_img = pil_img.convert("RGB")
+                np_arr = np.array(rgb_img)
+                return cv2.cvtColor(np_arr, cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            logger.error(f"Failed to load image via PIL fallback: {e}")
+
+        raise ValueError(f"Could not decode image at {image_path} (size: {file_size} bytes)")
+
     def preprocess_pipeline(self, image_path):
         """
         Processes a single image file through the full face alignment, cropping,
@@ -257,12 +291,7 @@ class FacialFeatureExtractor:
                   - 'lips': lips region image (50x50)
                   And bounding boxes (in aligned coordinate system) for UI display.
         """
-        if not os.path.exists(image_path):
-            raise FileNotFoundError(f"Image not found at {image_path}")
-
-        image = cv2.imread(image_path)
-        if image is None:
-            raise ValueError(f"Could not load image at {image_path}")
+        image = self.load_image(image_path)
 
         # 1. Detect Landmarks on original image
         landmarks = self._get_landmarks(image)

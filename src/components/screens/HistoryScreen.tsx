@@ -40,7 +40,9 @@ export const HistoryScreen: React.FC = () => {
         <ActivityIndicator style={styles.loader} color="#6366F1" size="large" />
       ) : analysesList.length === 0 ? (
         <View style={[styles.emptyCard, isDark ? styles.cardDark : styles.cardLight]}>
-          <Text style={styles.emptyIcon}>📂</Text>
+          <View style={styles.emptyBadgeWrapper}>
+            <Text style={styles.emptyBadgeText}>NO RECORDS</Text>
+          </View>
           <Text style={[styles.emptyTitle, isDark ? styles.textWhite : styles.textDark]}>No scans found</Text>
           <Text style={[styles.emptyDesc, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}>
             Run an analysis from the dashboard.
@@ -58,7 +60,11 @@ export const HistoryScreen: React.FC = () => {
               onPress={() => handleSelectItem(item)}
             >
               <View style={styles.itemLeft}>
-                <Text style={styles.itemFileIcon}>🖼️</Text>
+                <View style={[styles.fileTagWrapper, isDark ? styles.fileTagDark : styles.fileTagLight]}>
+                  <Text style={[styles.fileTagText, isDark ? styles.fileTagTextDark : styles.fileTagTextLight]}>
+                    {item.media?.mime_type?.includes("video") || item.media?.filename?.endsWith(".mp4") ? "VID" : "IMG"}
+                  </Text>
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.itemFilename, isDark ? styles.textWhite : styles.textDark]} numberOfLines={1}>
                     {item.media?.filename || `Scan #${item.id}`}
@@ -145,9 +151,18 @@ const styles = StyleSheet.create({
   cardDark: {
     backgroundColor: "#1E293B",
   },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 8,
+  emptyBadgeWrapper: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#F1F5F9",
+    marginBottom: 12,
+  },
+  emptyBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748B",
+    letterSpacing: 0.5,
   },
   emptyTitle: {
     fontSize: 16,
@@ -190,8 +205,30 @@ const styles = StyleSheet.create({
     gap: 12,
     flex: 1,
   },
-  itemFileIcon: {
-    fontSize: 24,
+  fileTagWrapper: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 42,
+  },
+  fileTagLight: {
+    backgroundColor: "#EEF2FF",
+  },
+  fileTagDark: {
+    backgroundColor: "#312E81",
+  },
+  fileTagText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  fileTagTextLight: {
+    color: "#4F46E5",
+  },
+  fileTagTextDark: {
+    color: "#A5B4FC",
   },
   itemFilename: {
     fontSize: 14,

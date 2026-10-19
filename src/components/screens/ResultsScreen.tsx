@@ -101,7 +101,7 @@ export const ResultsScreen: React.FC = () => {
           <View style={styles.regionList}>
             {/* Eye Region Row */}
             <View style={styles.regionRow}>
-              <Text style={styles.regionLabel}>👁️ Eye Region</Text>
+              <Text style={styles.regionLabel}>Eye Region</Text>
               <View style={styles.regionValueRow}>
                 <Text style={[styles.regionPred, metrics.eye.prediction === "Real" ? styles.textPositive : styles.textNegative]}>{metrics.eye.prediction}</Text>
                 <Text style={styles.regionScore}>{toPercentStr(metrics.eye.confidence)}</Text>
@@ -110,7 +110,7 @@ export const ResultsScreen: React.FC = () => {
 
             {/* Nose Region Row */}
             <View style={styles.regionRow}>
-              <Text style={styles.regionLabel}>👃 Nose Region</Text>
+              <Text style={styles.regionLabel}>Nose Region</Text>
               <View style={styles.regionValueRow}>
                 <Text style={[styles.regionPred, metrics.nose.prediction === "Real" ? styles.textPositive : styles.textNegative]}>{metrics.nose.prediction}</Text>
                 <Text style={styles.regionScore}>{toPercentStr(metrics.nose.confidence)}</Text>
@@ -119,7 +119,7 @@ export const ResultsScreen: React.FC = () => {
 
             {/* Lips Region Row */}
             <View style={styles.regionRow}>
-              <Text style={styles.regionLabel}>👄 Lips Region</Text>
+              <Text style={styles.regionLabel}>Lips Region</Text>
               <View style={styles.regionValueRow}>
                 <Text style={[styles.regionPred, metrics.lips?.prediction === "Real" ? styles.textPositive : styles.textNegative]}>{metrics.lips?.prediction || "Real"}</Text>
                 <Text style={styles.regionScore}>{toPercentStr(metrics.lips?.confidence || 0.85)}</Text>
@@ -128,7 +128,7 @@ export const ResultsScreen: React.FC = () => {
 
             {/* Whole Face Row */}
             <View style={styles.regionRow}>
-              <Text style={styles.regionLabel}>👤 Whole Face</Text>
+              <Text style={styles.regionLabel}>Whole Face</Text>
               <View style={styles.regionValueRow}>
                 <Text style={[styles.regionPred, metrics.face.prediction === "Real" ? styles.textPositive : styles.textNegative]}>{metrics.face.prediction}</Text>
                 <Text style={styles.regionScore}>{toPercentStr(metrics.face.confidence)}</Text>
@@ -340,20 +340,20 @@ export const ResultsScreen: React.FC = () => {
           {anyRegionFake ? (
             <View style={styles.statusBadgeNegative}>
               <Text style={styles.statusBadgeTextNegative}>
-                ⚠️ Deepfake Manipulation Detected in {regionTab.toUpperCase()}
+                Deepfake Manipulation Detected in {regionTab.toUpperCase()}
               </Text>
             </View>
           ) : (
             <View style={styles.statusBadgePositive}>
               <Text style={styles.statusBadgeTextPositive}>
-                ✓ Verified Real - No Manipulation Detected
+                Verified Real - No Manipulation Detected
               </Text>
             </View>
           )}
 
           {/* Main Graphic Box showing scanned region / thermal overlay */}
           <View style={styles.heatmapGraphicWrapper}>
-            {heatmapToggle === "heatmap" && anyRegionFake ? (
+            {heatmapToggle === "heatmap" ? (
               <Image 
                 source={heatmapSource} 
                 style={styles.heatmapMainImage} 
@@ -368,11 +368,13 @@ export const ResultsScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Display Intensity Bar for Negative parts, or Explanation Card for Real parts */}
-          {heatmapToggle === "heatmap" && anyRegionFake ? (
+          {/* Display Intensity Bar for Thermal Heatmap View */}
+          {heatmapToggle === "heatmap" ? (
             <View style={styles.intensityContainer}>
               <View style={styles.intensityRow}>
-                <Text style={styles.intensityLabel}>Manipulation Artifact Intensity</Text>
+                <Text style={styles.intensityLabel}>
+                  {anyRegionFake ? "Fake / Manipulation Hotspot Intensity" : "Clean Region Intensity"}
+                </Text>
               </View>
               <View style={styles.gradientBar}>
                 <View style={{ flex: 1, backgroundColor: "#3B82F6" }} />
@@ -381,17 +383,15 @@ export const ResultsScreen: React.FC = () => {
                 <View style={{ flex: 1, backgroundColor: "#EF4444" }} />
               </View>
               <View style={styles.intensityRangeRow}>
-                <Text style={styles.intensityText}>Low Risk</Text>
-                <Text style={styles.intensityText}>High Manipulation</Text>
+                <Text style={styles.intensityText}>Real / Original</Text>
+                <Text style={styles.intensityText}>Fake / Hotspot Highlight</Text>
               </View>
             </View>
           ) : (
             <View style={styles.heatmapStatusCard}>
-              <Text style={styles.statusInfoTitle}>Region Analysis Note</Text>
+              <Text style={styles.statusInfoTitle}>Original Crop View</Text>
               <Text style={styles.statusInfoText}>
-                {anyRegionFake
-                  ? "Showing clean original image crop for comparison."
-                  : "Heatmaps are generated specifically for facial parts that test negative (fake). Since this part passed as Real, no manipulation heatmap is shown."}
+                Showing clean original image crop for side-by-side comparison with the heat map overlay.
               </Text>
             </View>
           )}

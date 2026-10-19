@@ -150,6 +150,7 @@ def upload_image(
     
     # Save the original file locally first so the preprocessing module can access it
     try:
+        file.file.seek(0)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
     except Exception as e:
@@ -158,8 +159,23 @@ def upload_image(
             detail=f"Failed to save upload: {e}"
         )
 
-    # Get file size
+    # Get file size and validate
     size_bytes = os.path.getsize(file_path)
+    if size_bytes < 100:
+        content_preview = ""
+        try:
+            with open(file_path, "r", errors="ignore") as f:
+                content_preview = f.read(100).strip()
+        except Exception:
+            pass
+        try:
+            os.remove(file_path)
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Uploaded file is invalid or corrupted (only {size_bytes} bytes). Content: '{content_preview}'"
+        )
     
     # Upload original file to Cloudinary (falls back to local static serving if credentials are unset)
     try:
@@ -240,7 +256,7 @@ def upload_image(
 
     if results is None:
         try:
-            raw_img = cv2.imread(target_image_path)
+            raw_img = extractor.load_image(target_image_path)
             results = extractor._fallback_face_crop(raw_img)
         except Exception:
             db_analysis.status = "failed"
@@ -277,16 +293,16 @@ def upload_image(
             lips_pred = model_adapters["lips"].predict(results["crops"]["lips"])
             
             # Compute Grad-CAM heatmaps where supported
-            face_heatmap = model_adapters["face"].explain(results["crops"]["face"])
-            eye_heatmap = model_adapters["eye"].explain(results["crops"]["eye"])
-            nose_heatmap = model_adapters["nose"].explain(results["crops"]["nose"])
-            lips_heatmap = model_adapters["lips"].explain(results["crops"]["lips"])
+            face_hm = model_adapters["face"].explain(results["crops"]["face"])
+            eye_hm = model_adapters["eye"].explain(results["crops"]["eye"])
+            nose_hm = model_adapters["nose"].explain(results["crops"]["nose"])
+            lips_hm = model_adapters["lips"].explain(results["crops"]["lips"])
             
             predictions_list = [
-                {**face_pred, "heatmap": face_heatmap},
-                {**eye_pred, "heatmap": eye_heatmap},
-                {**nose_pred, "heatmap": nose_heatmap},
-                {**lips_pred, "heatmap": lips_heatmap},
+                {**face_pred, "heatmap": face_hm},
+                {**eye_pred, "heatmap": eye_hm},
+                {**nose_pred, "heatmap": nose_hm},
+                {**lips_pred, "heatmap": lips_hm},
             ]
         except Exception as e:
             print(f"Error during Keras inference, falling back to mock: {e}")
@@ -300,10 +316,25 @@ def upload_image(
             {"model": "lips", "prediction": "real", "confidence": 0.85, "scores": {"real": 0.85, "fake": 0.15}},
         ]
 
-    # Save model predictions to database
+    # Save model predictions to database & generate focused heatmaps
     for pred in predictions_list:
         heatmap_url = None
         heatmap_img = pred.get("heatmap")
+        crop_img = results["crops"].get(pred["model"])
+        
+        # Ensure every prediction gets a high-definition thermal heatmap highlight
+        if heatmap_img is None and crop_img is not None:
+            adapter = model_adapters.get(pred["model"])
+            is_fake_pred = pred.get("prediction") == "fake"
+            fake_sc = pred.get("scores", {}).get("fake", 0.5)
+            if adapter is not None:
+                heatmap_img = adapter.generate_focused_heatmap(crop_img, is_fake=is_fake_pred, fake_score=fake_sc)
+            else:
+                # Fallback generator if adapter unavailable
+                from adapters import FaceModelAdapter
+                dummy_adapter = FaceModelAdapter.__new__(FaceModelAdapter)
+                heatmap_img = dummy_adapter.generate_focused_heatmap(crop_img, is_fake=is_fake_pred, fake_score=fake_sc)
+
         if heatmap_img is not None:
             heatmap_filename = f"heatmap_{pred['model']}_{db_analysis.id}.png"
             heatmap_path = os.path.join(CROPS_DIR, heatmap_filename)

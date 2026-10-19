@@ -93,16 +93,52 @@ export const api = {
     const mimeType = isVideo ? `video/${ext === 'mov' ? 'quicktime' : ext}` : `image/${ext === 'jpg' || ext === 'jpeg' ? 'jpeg' : 'png'}`;
     const targetName = fileName || (isVideo ? `upload_${Date.now()}.mp4` : `upload_${Date.now()}.png`);
 
+    // In modern Expo / React Native (WinterCG compliant), FormData requires Blob/File,
+    // not legacy `{ uri, name, type }` objects which throw "Unsupported FormDataPart implementation".
     try {
       const res = await fetch(fileUri);
+      if (!res.ok) {
+        throw new Error(`fetch returned HTTP ${res.status}`);
+      }
       const blob = await res.blob();
-      formData.append("file", blob, targetName);
-    } catch {
-      formData.append("file", {
-        uri: Platform.OS === "android" ? fileUri : fileUri.replace("file://", ""),
-        name: targetName,
-        type: mimeType,
-      } as any);
+      if (!blob || blob.size < 50) {
+        throw new Error(`Blob is empty or too small (${blob?.size || 0} bytes)`);
+      }
+      if (typeof File !== "undefined") {
+        try {
+          const file = new File([blob], targetName, { type: mimeType });
+          formData.append("file", file);
+        } catch {
+          formData.append("file", blob, targetName);
+        }
+      } else {
+        formData.append("file", blob, targetName);
+      }
+    } catch (fetchErr) {
+      console.warn("fetch(fileUri) failed, attempting XHR blob conversion:", fetchErr);
+      try {
+        const blob: Blob = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.onload = () => {
+            if (xhr.response) {
+              resolve(xhr.response);
+            } else {
+              reject(new Error(`XHR returned empty response`));
+            }
+          };
+          xhr.onerror = () => reject(new Error("XHR failed to convert file to blob"));
+          xhr.responseType = "blob";
+          xhr.open("GET", fileUri, true);
+          xhr.send(null);
+        });
+        if (!blob || blob.size < 50) {
+          throw new Error(`File is empty or invalid (${blob?.size || 0} bytes)`);
+        }
+        formData.append("file", blob, targetName);
+      } catch (xhrErr: any) {
+        console.error("Failed to convert fileUri to Blob:", xhrErr);
+        throw new Error(`Failed to load selected media: ${xhrErr?.message || xhrErr}`);
+      }
     }
 
     const response = await fetch(`${API_PREFIX}/uploads/image`, {
@@ -114,8 +150,23 @@ export const api = {
     });
 
     if (!response.ok) {
-      const errData = await response.json().catch(() => ({ detail: "Failed to upload image." }));
-      throw new Error(errData.detail || "Failed to upload image.");
+      let detailMsg = "Failed to upload image.";
+      try {
+        const errData = await response.json();
+        if (typeof errData.detail === "string") {
+          detailMsg = errData.detail;
+        } else if (Array.isArray(errData.detail)) {
+          detailMsg = errData.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ");
+        } else if (errData.detail) {
+          detailMsg = JSON.stringify(errData.detail);
+        } else if (errData.message) {
+          detailMsg = errData.message;
+        }
+      } catch {
+        detailMsg = `Upload failed with status ${response.status}`;
+      }
+      console.error(`[Upload error ${response.status}]:`, detailMsg);
+      throw new Error(detailMsg);
     }
     return response.json(); // returns AnalysisOut
   },

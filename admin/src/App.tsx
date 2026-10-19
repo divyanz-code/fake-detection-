@@ -5,6 +5,7 @@ import {
   Cpu, 
   LogOut, 
   ShieldAlert, 
+  Shield,
   Users, 
   Image as ImageIcon, 
   RefreshCw,
@@ -184,7 +185,7 @@ export default function App() {
       <div className="min-h-screen bg-darkBg flex items-center justify-center px-4">
         <div className="bg-darkCard p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-800">
           <div className="flex justify-center mb-6">
-            <span className="text-3xl">🛡️</span>
+            <Shield className="w-10 h-10 text-brandPrimary" />
           </div>
           <h2 className="text-2xl font-bold text-center text-white mb-2">AegisFace Admin</h2>
           <p className="text-slate-400 text-sm text-center mb-6">Sign in to access system metrics and analytics.</p>
@@ -239,7 +240,7 @@ export default function App() {
       <aside className="w-full md:w-64 bg-darkCard border-b md:border-r border-slate-800 flex flex-col justify-between shrink-0">
         <div>
           <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-            <span className="text-2xl">🛡️</span>
+            <Shield className="w-7 h-7 text-brandPrimary shrink-0" />
             <div>
               <h1 className="font-extrabold text-white leading-none">AegisFace</h1>
               <span className="text-[10px] text-brandPrimary font-bold uppercase tracking-wider">Admin Portal</span>

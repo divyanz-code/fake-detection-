@@ -81,8 +81,10 @@ export const UploadScreen: React.FC = () => {
               <Image source={{ uri: imageUri }} style={styles.previewImage} />
             ) : (
               <View style={[styles.previewImage, { backgroundColor: "#1E1B4B", alignItems: "center", justifyContent: "center" }]}>
-                <Text style={{ fontSize: 48 }}>🎥</Text>
-                <Text style={{ color: "#FFFFFF", marginTop: 8, fontWeight: "600" }}>Video Ready to Scan</Text>
+                <View style={styles.videoBadgeCircle}>
+                  <View style={styles.playIconTriangle} />
+                </View>
+                <Text style={{ color: "#FFFFFF", marginTop: 12, fontWeight: "600", fontSize: 15 }}>Video Ready to Scan</Text>
               </View>
             )}
             <View style={styles.fileMeta}>
@@ -96,7 +98,7 @@ export const UploadScreen: React.FC = () => {
         ) : (
           <Pressable style={styles.dashedBox} onPress={pickImage}>
             <View style={styles.uploadIconBg}>
-              <Text style={styles.uploadIcon}>⬆️</Text>
+              <Text style={styles.uploadIcon}>↑</Text>
             </View>
             <Text style={styles.uploadPrompt}>Tap to upload Image / Video</Text>
             <Text style={styles.uploadSubPrompt}>Supports JPG, PNG, WEBP, MP4, MOV</Text>
@@ -250,6 +252,29 @@ const styles = StyleSheet.create({
     width: "100%",
     flex: 1,
     borderRadius: 12,
+  },
+  videoBadgeCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playIconTriangle: {
+    width: 0,
+    height: 0,
+    backgroundColor: "transparent",
+    borderStyle: "solid",
+    borderLeftWidth: 16,
+    borderRightWidth: 0,
+    borderBottomWidth: 10,
+    borderTopWidth: 10,
+    borderLeftColor: "#FFFFFF",
+    borderRightColor: "transparent",
+    borderTopColor: "transparent",
+    borderBottomColor: "transparent",
+    marginLeft: 4,
   },
   fileMeta: {
     marginVertical: 12,

@@ -31,7 +31,7 @@ export const LoginScreen: React.FC = () => {
     <View style={styles.container}>
       <View style={styles.formContainer}>
         {/* Header */}
-        <Text style={styles.title}>Welcome Back 👋</Text>
+        <Text style={styles.title}>Welcome Back</Text>
         <Text style={styles.subtitle}>Login to continue</Text>
 
         {/* Error Notification */}
@@ -68,7 +68,7 @@ export const LoginScreen: React.FC = () => {
               onChangeText={(text) => { setPassword(text); setLocalError(null); }}
             />
             <Pressable onPress={() => setSecureText(!secureText)} style={styles.eyeBtn}>
-              <Text style={styles.eyeIcon}>{secureText ? "👁️" : "🙈"}</Text>
+              <Text style={styles.eyeText}>{secureText ? "SHOW" : "HIDE"}</Text>
             </Pressable>
           </View>
         </View>
@@ -185,10 +185,13 @@ const styles = StyleSheet.create({
     color: "#1F2937",
   },
   eyeBtn: {
-    padding: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
   },
-  eyeIcon: {
-    fontSize: 16,
+  eyeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#4F46E5",
   },
   forgotBtn: {
     alignSelf: "flex-end",
