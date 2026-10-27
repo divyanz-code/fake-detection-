@@ -1,32 +1,30 @@
+
 # Base image
 FROM python:3.9-slim
 
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies required for OpenCV, MediaPipe, and PostgreSQL
+# System dependencies for OpenCV, MediaPipe and PostgreSQL
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libgomp1 \
     build-essential \
     libpq-dev \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install python packages
-COPY requirements.txt /app/
+# Install Python dependencies
+COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy backend application source files
+# Copy backend source
 COPY . /app/
 
-# Expose FastAPI server port
 EXPOSE 8000
 
-# Run uvicorn server mapping standard host interface
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
