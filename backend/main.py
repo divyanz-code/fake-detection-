@@ -1,3 +1,5 @@
+from huggingface_hub import snapshot_download
+import logging
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
@@ -53,29 +55,68 @@ except Exception as e:
     extractor = None
 
 # Initialize model adapters (will load Keras models on startup)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+CROPS_DIR = os.path.join(UPLOAD_DIR, "crops")
+
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(CROPS_DIR, exist_ok=True)
+
+MODELS_REPO_ID = os.getenv(
+    "HF_MODEL_REPO",
+    "divyanz/fake-detection-model",
+)
+
 models_dir = os.path.join(BASE_DIR, "models")
-face_model_dir = os.path.join(models_dir, "final_face_cvit (1)")
-eye_model_dir = os.path.join(models_dir, "final_eye_cnn (1)")
-nose_model_dir = os.path.join(models_dir, "final_nose_cnn")
-lips_model_dir = os.path.join(models_dir, "final_LIPS_cnn (1)")
+
+face_model_dir = os.path.join(
+    models_dir, "final_face_cvit (1)"
+)
+eye_model_dir = os.path.join(
+    models_dir, "final_eye_cnn (1)"
+)
+nose_model_dir = os.path.join(
+    models_dir, "final_nose_cnn"
+)
+lips_model_dir = os.path.join(
+    models_dir, "final_LIPS_cnn (1)"
+)
 
 model_adapters = {}
+logger = logging.getLogger(__name__)
+
 
 @app.on_event("startup")
 def load_models():
-    """Event handler to load deep learning models on startup."""
+    """Download and initialize the four trained Keras models."""
     try:
-        print("Loading deep learning Keras models...")
+        logger.info("Downloading models from Hugging Face: %s", MODELS_REPO_ID)
+
+        snapshot_download(
+            repo_id=MODELS_REPO_ID,
+            local_dir=models_dir,
+            allow_patterns=[
+                "final_face_cvit (1)/*",
+                "final_eye_cnn (1)/*",
+                "final_nose_cnn/*",
+                "final_LIPS_cnn (1)/*",
+            ],
+        )
+
+        logger.info("Model download complete. Loading Keras adapters.")
+
         model_adapters["face"] = FaceModelAdapter(face_model_dir)
         model_adapters["eye"] = EyeModelAdapter(eye_model_dir)
         model_adapters["nose"] = NoseModelAdapter(nose_model_dir)
         model_adapters["lips"] = LipsModelAdapter(lips_model_dir)
-        print("All 4 model adapters loaded successfully on startup.")
-    except Exception as e:
-        print(f"WARNING: Failed to load model adapters: {e}.")
-        print("Inference will use mock fallback if model adapters are unavailable.")
 
+        logger.info("All four Keras models loaded successfully.")
 
+    except Exception:
+        model_adapters.clear()
+        logger.exception("Model download or initialization failed.")
+        raise
 # --- AUTH ROUTES ---
 
 @app.post(f"{settings.API_V1_STR}/auth/register", response_model=schemas.UserOut, status_code=status.HTTP_201_CREATED)

@@ -1,4 +1,32 @@
-export const API_BASE_URL = "http://10.93.111.248:8000";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+
+const resolveApiBaseUrl = (): string => {
+  // 1. Explicit environment variable override
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+
+  // 2. Automatically extract development host IP from Expo Metro
+  const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
+  if (hostUri) {
+    const host = hostUri.split(":")[0];
+    if (host && host !== "localhost" && host !== "127.0.0.1") {
+      return `http://${host}:8000`;
+    }
+  }
+
+  // 3. Android Emulator localhost loopback mapping
+  if (Platform.OS === "android") {
+    return "http://10.0.2.2:8000";
+  }
+
+  // 4. Default fallback to current local network IP
+  return "http://10.93.111.248:8000";
+};
+
+export const API_BASE_URL = resolveApiBaseUrl();
+export const API_URL = API_BASE_URL;
 export const BASE_URL = API_BASE_URL;
 const API_PREFIX = `${BASE_URL}/api/v1`;
 
